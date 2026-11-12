@@ -4,7 +4,7 @@ export const EXTRACT_PROMPT = `You are reading a photo of ONE printed document (
 Return ONLY JSON that matches the schema.
 - doc_type: "bill", "notice", "medicine" or "other".
 - title: the company or medicine name and document kind, e.g. "Electricity bill".
-- fields: the facts a person must act on, each {label, value, confidence}. For a bill: amount due, due date, amount after due date, units, billing month, previous months' units if printed. For a notice: what is demanded, deadline, amount, consequence. For medicine: name, strength, dose, maximum per day, warnings, expiry date.
+- fields: the facts a person must act on, each {label, value, confidence}. For a bill: amount due, due date, amount after due date, units, billing month, previous months' units if printed. For a notice: what is demanded, deadline, amount, what happens if ignored (e.g. disconnection), and how or where to pay or respond. For medicine: name, strength, dose, maximum per day, warnings, expiry date.
 - Copy values exactly as printed. Never guess. If a character is unclear, set confidence "low".
 - private_values: EVERY person name, CNIC, address, account/consumer/reference number, phone number and email, each with kind NAME, CNIC, ADDRESS, ACCOUNT, PHONE or EMAIL.
 - text: leave as an empty string "" (the app does not need it).
