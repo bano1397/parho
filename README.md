@@ -68,6 +68,11 @@ Firebase AI Logic (hybrid inference), Gemini Nano, Gemini, Firebase App Check, R
 
 AI disclosure: built by Shehar Bano with help from Claude Code, an AI coding assistant.
 
+## What was built when
+
+- **Before the submission period (11 Nov 2026, evening PKT):** project spec, initial scaffold, first version of on-device reading, redaction and Urdu explanation (first commit).
+- **During the submission period (from 12 Nov 2026):** Firebase Hosting deploy, App Check with Fraud Defense, improved notice fields, offline app shell (PWA), CI, and everything after commit `de09f38`. See the git history for details.
+
 ## License
 
 Apache-2.0
