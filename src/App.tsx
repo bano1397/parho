@@ -4,7 +4,7 @@ import { readDocument, buildCloudPayload, explain, UserCancelled } from './ai/ro
 import type { CloudPayload, Extraction, TimelineEntry } from './ai/schema';
 import { PrivacyBlocked } from './privacy/safetyNet';
 import { checkFile, prepare, InvalidPhoto } from './image/prepare';
-import { ocr } from './ocr/tesseract';
+import { ocr, onOcrProgress } from './ocr/tesseract';
 import { speak, stopSpeaking } from './speech/speak';
 
 type Lang = CloudPayload['language'];
@@ -86,11 +86,15 @@ export default function App() {
     setEx(null); setPayload(null); setAnswer(''); setTimeline([]); setError(''); setOcrPreview('');
   }
 
+  const [ocrStatus, setOcrStatus] = useState<{ msg: string; p: number } | null>(null);
+
   async function handle(file: Blob) {
     reset();
     try {
       checkFile(file);
       setPhase('reading');
+      setOcrStatus(null);
+      onOcrProgress((msg, p) => setOcrStatus({ msg, p }));
       const img = await prepare(file);
       setPreview(img.url);
       const result = await readDocument(img, {
@@ -198,7 +202,20 @@ export default function App() {
         </div>
       </section>
 
-      {phase === 'reading' && <div className="card" aria-live="polite"><h2>Reading on this device…</h2><progress /></div>}
+      {phase === 'reading' && <div className="card" aria-live="polite"><h2>Reading on this device…</h2>
+          {ocrStatus ? (
+            <>
+              <progress value={ocrStatus.p} max={1} />
+              <p className="muted">
+                {/load|init/i.test(ocrStatus.msg)
+                  ? 'First time only: downloading the text reader (about a minute). Next time it is instant.'
+                  : 'Reading the text on this device…'}
+              </p>
+            </>
+          ) : (
+            <progress />
+          )}
+        </div>}
 
       {phase === 'confirm-ocr' && (
         <div className="card">
@@ -237,6 +254,10 @@ export default function App() {
             ))}
             {ex.fields.length === 0 && <p className="muted">No key facts found. Try a clearer, flatter photo.</p>}
           </div>
+          <button className="linkish" onClick={() => {
+            const b = new Blob([JSON.stringify({ ...ex, timeline }, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'parho-reading.json'; a.click();
+          }}>Save this reading (JSON, stays on your computer)</button>
           <p className="muted">{Math.max(ex.private_values.length, (ex.text.match(/\[(NAME|CNIC|ADDRESS|ACCOUNT|PHONE|EMAIL|LONG_NUMBER)\]/g) ?? []).length)} private detail(s) found and kept on this device.</p>
         </section>
       )}

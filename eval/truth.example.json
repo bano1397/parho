@@ -1,0 +1,4 @@
+{
+  "bill_01.jpg": { "doc_type": "bill", "amount due": "Rs 4,520", "due date": "15-12-2026", "units": "312" },
+  "med_01.jpg": { "doc_type": "medicine", "name": "Panadol", "strength": "500 mg", "expiry": "08/2028" }
+}

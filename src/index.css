@@ -68,3 +68,4 @@ label { display: inline-flex; gap: 8px; align-items: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 footer { margin-top: 32px; color: var(--muted); font-size: .85em; }
 a { color: var(--cloud); }
+.linkish{background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;padding:4px 0;font-size:.9em}
