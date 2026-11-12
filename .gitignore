@@ -28,3 +28,6 @@ dist-ssr
 !.env.example
 eval/private/
 *.local
+dist-e2e/
+test-results/
+playwright-report/

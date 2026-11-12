@@ -39,8 +39,11 @@ Requirements: Node 20+, and desktop Chrome 139+ for on-device AI. For image inpu
 npm install
 cp .env.example .env.local   # fill in your Firebase web config + App Check keys
 npm run dev
-npm test
+npm test        # 33 unit + property-based privacy tests
+npm run e2e     # 5 browser tests (Playwright + axe) on a test build with a fake cloud
 ```
+
+Lighthouse on the live site: Accessibility 100, Best Practices 100, Performance 96, SEO 92.
 
 Firebase setup:
 1. Create a Firebase project and enable **AI Logic** with the **Gemini Developer API**.

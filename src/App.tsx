@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { realEngines, type NanoStatus } from './ai/engines';
+import { realEngines as prodEngines, type Engines, type NanoStatus } from './ai/engines';
+
+// End-to-end test builds only (VITE_E2E=1): tests inject fake engines. Removed from production builds.
+const realEngines: Engines =
+  (import.meta.env.VITE_E2E === '1' && (globalThis as { __parhoEngines?: Engines }).__parhoEngines) || prodEngines;
 import { readDocument, buildCloudPayload, explain, UserCancelled } from './ai/router';
 import type { CloudPayload, Extraction, TimelineEntry } from './ai/schema';
 import { PrivacyBlocked } from './privacy/safetyNet';
