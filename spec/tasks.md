@@ -10,7 +10,7 @@ Each task has a **Done when** check. Don't move on until it passes.
 - [x] 0.3 App Check: parho registered with Fraud Defense (reCAPTCHA Enterprise) site key — use `ReCaptchaEnterpriseProvider`. Site key in `.env.local`. Local dev uses a debug token.
 - [ ] 0.4 Collect test set: ≥10 bills/notices (LESCO/IESCO/K-Electric/SNGPL…) + 2 medicine boxes. Write true values into `ground_truth.json`, kept private. Done when: 12 photos + JSON exist in a private folder.
 - [x] 0.5 Make 3 fake Sample_Documents (fake name, CNIC `00000-0000000-0`). Done when: 3 images with no real data.
-- [~] 0.6 Overview rules read (spec/hackathon-rules.md); Official Rules page not posted yet. Read the official rules when published: eligibility (Pakistan), required tech, video length, judging. Done when: this spec is updated if anything conflicts.
+- [x] 0.6 Official rules read (spec/hackathon-rules.md): Pakistan eligible; disclose pre-period work; English support required.
 - [~] 0.7 SDK calls verified from docs (spec/sdk-notes.md); still watch the Firebase build session, Thu 12 Nov, 11 PM PKT. Done when: notes on the exact SDK calls.
 
 ## Day 1 — Go / no-go (after submissions open)
