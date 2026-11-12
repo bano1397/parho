@@ -27,7 +27,7 @@ function friendly(e: unknown): string {
   if (e instanceof InvalidPhoto) return e.message;
   const m = String((e as Error)?.message ?? e);
   if (/429|quota|exhausted/i.test(m)) return 'The free cloud limit is used up for now. Please try again in a minute.';
-  if (/503|busy|overload|timed out/i.test(m)) return 'The cloud is busy right now. Your reading is safe on this device — try “Explain” again in a moment.';
+  if (/\b50[023]\b|busy|overload|high demand|timed out/i.test(m)) return 'The cloud is busy right now. Your reading is safe on this device — try “Explain” again in a moment.';
   if (/app.?check|403|permission/i.test(m)) return 'This copy of Parho is not verified with Firebase App Check, so the cloud refused. (Developer: register the debug token.)';
   if (!navigator.onLine) return 'You are offline. The reading worked on this device; the explanation will need internet.';
   return 'Something went wrong: ' + m;
@@ -229,7 +229,7 @@ export default function App() {
           </div>
           {preview && <img className="preview" src={preview} alt="Your photo, blurred for privacy" />}
           <div className="fields" style={{ marginTop: 12 }}>
-            {ex.fields.map((f, i) => (
+            {ex.fields.filter((f) => !/^\s*\[[A-Z_]+\]\s*$/.test(f.value)).map((f, i) => (
               <div key={i} className={`field ${f.confidence === 'low' ? 'low' : ''}`}>
                 <div className="l">{f.label}{f.confidence === 'low' && ' · please check'}</div>
                 <div className="v">{f.value}</div>
@@ -237,7 +237,7 @@ export default function App() {
             ))}
             {ex.fields.length === 0 && <p className="muted">No key facts found. Try a clearer, flatter photo.</p>}
           </div>
-          <p className="muted">{ex.private_values.length} private detail(s) found and kept on this device.</p>
+          <p className="muted">{Math.max(ex.private_values.length, (ex.text.match(/\[(NAME|CNIC|ADDRESS|ACCOUNT|PHONE|EMAIL|LONG_NUMBER)\]/g) ?? []).length)} private detail(s) found and kept on this device.</p>
         </section>
       )}
 

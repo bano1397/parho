@@ -13,6 +13,19 @@ function flexibleRe(value: string): RegExp | null {
   return new RegExp(chars.map(escapeRe).join('[\\s\\-.,_/–]*'), 'gi');
 }
 
+// Labelled lines on bills/notices whose VALUE is private (used when no model flagged them, e.g. raw OCR).
+const LABELLED: { kind: PrivateValue['kind']; re: RegExp }[] = [
+  { kind: 'NAME', re: /^(\s*(?:to|name|consumer(?:'s)?\s*name|customer\s*name|patient(?:\s*name)?|father(?:'s)?\s*name|s\/o|d\/o|w\/o|mr\.?|mrs\.?|ms\.?|نام|بنام)\s*[:\-–.]?\s+)(.+)$/gim },
+  { kind: 'ADDRESS', re: /^(\s*(?:address|addr\.?|service\s*address|postal\s*address|پتہ)\s*[:\-–.]?\s+)(.+)$/gim },
+  { kind: 'ACCOUNT', re: /^(\s*(?:account|acc(?:ount)?\s*(?:no|#|number)|consumer\s*(?:no|id|#|number)|reference\s*(?:no|#|number)|ref\.?\s*no|customer\s*id|meter\s*(?:no|#|number))\.?\s*[:\-–.]?\s+)(.+)$/gim },
+];
+
+export function redactLabelledLines(text: string): string {
+  let out = text;
+  for (const { kind, re } of LABELLED) out = out.replace(re, (_m, head: string, val: string) => (/^\[[A-Z_]+\]$/.test(val.trim()) ? head + val : `${head}[${kind}]`));
+  return out;
+}
+
 export function redact(text: string, privateValues: PrivateValue[] = []): string {
   let out = normaliseDigits(text);
   // Known values first (names, addresses, account numbers the reader flagged).
@@ -21,6 +34,7 @@ export function redact(text: string, privateValues: PrivateValue[] = []): string
     const re = flexibleRe(pv.value);
     if (re) out = out.replace(re, `[${pv.kind}]`);
   }
+  out = redactLabelledLines(out);
   // Then pattern-based values the reader may have missed.
   for (const { kind, re } of PATTERNS) {
     out = out.replace(new RegExp(re.source, 'g'), `[${kind}]`);

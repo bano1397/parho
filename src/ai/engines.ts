@@ -89,7 +89,16 @@ export const realEngines: Engines = {
   },
   async cloud(prompt, json = false) {
     const m = await getCloud(json);
-    const r = await withTimeout(m.generateContent(prompt), CONFIG.CLOUD_TIMEOUT_MS, 'Cloud');
-    return { text: r.response.text(), source: String(r.response.inferenceSource ?? 'in_cloud') };
+    // Retry briefly when the cloud model is overloaded (500/503/"high demand"); other errors fail fast.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await withTimeout(m.generateContent(prompt), CONFIG.CLOUD_TIMEOUT_MS, 'Cloud');
+        return { text: r.response.text(), source: String(r.response.inferenceSource ?? 'in_cloud') };
+      } catch (e) {
+        const busy = /\b(500|502|503)\b|high demand|overload|unavailable/i.test(String((e as Error)?.message ?? e));
+        if (!busy || attempt >= 2) throw e;
+        await new Promise((res) => setTimeout(res, 1500 * 2 ** attempt));
+      }
+    }
   },
 };

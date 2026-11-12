@@ -80,3 +80,18 @@ describe('property tests', () => {
     fc.assert(fc.property(filler, (a) => { expect(() => assertClean({ a })).not.toThrow(); }), { numRuns: 300 });
   });
 });
+
+import { redact as redact2 } from './redact';
+describe('labelled-line redaction (OCR fallback)', () => {
+  it('hides names, addresses and account numbers found only by their label', () => {
+    const t = 'To: Fatima Fake Bibi\nAddress: Flat 0, Block Z, Sample Colony, Karachi\nAccount No: ABC-12\nAmount due: Rs 6,780';
+    const r = redact2(t);
+    expect(r).not.toMatch(/Fatima|Block Z|ABC-12/);
+    expect(r).toContain('To: [NAME]');
+    expect(r).toContain('Address: [ADDRESS]');
+    expect(r).toContain('Rs 6,780');
+  });
+  it('keeps non-private lines like "Total amount"', () => {
+    expect(redact2('Total amount: Rs 500\nDue date: 30-11-2026')).toBe('Total amount: Rs 500\nDue date: 30-11-2026');
+  });
+});
