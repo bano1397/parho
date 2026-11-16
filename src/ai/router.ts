@@ -80,7 +80,20 @@ export function sanitizeExtraction<T extends Extraction>(ex: T): T {
     if (ex.doc_type === 'medicine' && MED_RISKY_LABEL.test(f.label)) return false;
     return !/^(not specified|n\/a|none|unknown)$/i.test(f.value.trim());
   });
-  return { ...ex, fields };
+  return { ...ex, fields: ex.doc_type === 'bill' ? checkUnits(fields) : fields };
+}
+
+/** On a bill, units used = present reading − previous reading. If the model's "units" disagrees, trust the arithmetic. */
+function checkUnits<F extends { label: string; value: string }>(fields: F[]): F[] {
+  const num = (f?: F) => (f ? Number(f.value.replace(/[^\d]/g, '')) : NaN);
+  const prev = fields.find((f) => /prev\w*\s*reading/i.test(f.label));
+  const cur = fields.find((f) => /(present|current)\s*reading/i.test(f.label));
+  const diff = num(cur) - num(prev);
+  if (!(diff > 0 && diff < 100000)) return fields;
+  const i = fields.findIndex((f) => /^\s*(current\s*)?units?\s*(consumed|used)?\s*$/i.test(f.label));
+  if (i >= 0 && num(fields[i]) === diff) return fields;
+  const fixed = { ...(i >= 0 ? fields[i] : prev!), label: 'Units', value: String(diff) } as F;
+  return i >= 0 ? fields.map((f, k) => (k === i ? fixed : f)) : [...fields, fixed];
 }
 
 /** Builds the ONLY object that may go to the cloud for the explanation. Throws PrivacyBlocked. */

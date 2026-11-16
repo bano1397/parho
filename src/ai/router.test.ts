@@ -122,3 +122,13 @@ describe('sanitizeExtraction', () => {
     expect((ex as { fields: { label: string }[] }).fields.map((f) => f.label)).toEqual(['Brand Name', 'Active Ingredient']);
   });
 });
+
+describe('units check', () => {
+  const b = (fields: { label: string; value: string }[]) => (_san({ title: 'x', private_values: [], text: '', doc_type: 'bill', fields } as never) as { fields: { label: string; value: string }[] }).fields;
+  it('replaces wrong units with present minus previous reading', () => {
+    expect(b([{ label: 'UNITS', value: '151' }, { label: 'PREVIOUS READING', value: '81940' }, { label: 'CURRENT READING', value: '82024' }])[0]).toEqual({ label: 'Units', value: '84' });
+  });
+  it('leaves units alone when readings are unusable', () => {
+    expect(b([{ label: 'Units', value: '31' }, { label: 'Previous Reading', value: '12630' }, { label: 'Current Reading', value: '12630' }])[0].value).toBe('31');
+  });
+});
