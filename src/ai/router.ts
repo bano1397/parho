@@ -66,7 +66,7 @@ export async function readDocument(
   return sanitizeExtraction({ ...ex, text: redacted, source: 'cloud_from_ocr' });
 }
 
-const PRIVATE_LABEL = /address|cnic|consumer|reference|ref\.?\s*no|account|acc\.?\s*no|meter\s*no|phone|mobile|email|customer\s*id/i;
+const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*no|account|acc\.?\s*no|meter\s*no|phone|mobile|email|customer\s*id/i;
 // Gemini Nano invents doses and dates that are not printed on small or blurry boxes, so a
 // medicine reading keeps only what identifies the medicine; the explanation sends people to the pharmacist.
 const MED_RISKY_LABEL = /dos|tablet|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every/i;
