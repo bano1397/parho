@@ -24,15 +24,15 @@ const UR = `آپ ایک مددگار ہیں جو کم پڑھے لکھے بزرگ
 صرف اسی ڈیٹا کی بنیاد پر، زیادہ سے زیادہ 6 آسان جملوں میں بتائیں: یہ کیا ہے، کیا کرنا ہے، کب تک، کتنی رقم، اور کوئی غیر معمولی بات۔
 جو معلومات موجود نہ ہو اس کے لیے لکھیں "کاغذ پر واضح نہیں"۔
 بل میں دھوکہ دہی کا الزام نہ لگائیں۔ کسی کو "بابا جی" یا "اماں جی" جیسے الفاظ سے مخاطب نہ کریں، سیدھا "آپ" لکھیں۔ صرف اردو میں جواب دیں۔`;
-const UR_MED = `یہ دوا کا کاغذ ہے: اپنی طرف سے کوئی مشورہ نہ دیں، صرف وہی بتائیں جو لکھا ہے، اور آخر میں لکھیں "ڈاکٹر یا فارماسسٹ سے تصدیق کریں"۔`;
+const UR_MED = `یہ دوا کا کاغذ ہے: اپنی طرف سے کوئی مشورہ نہ دیں، صرف وہی بتائیں جو لکھا ہے (دوا کا نام، کس چیز کی دوا ہے، طاقت)۔ رقم یا تاریخ کا ذکر نہ کریں۔ جو باتیں موجود نہیں انہیں ایک ایک کر کے نہ گنوائیں؛ صرف ایک جملہ لکھیں: "کتنی اور کب کھانی ہے، یہ ڈاکٹر یا فارماسسٹ سے پوچھیں"۔ زیادہ سے زیادہ 3 جملے۔`;
 
 const ROMAN = `You explain papers to elderly people with little schooling. Reply ONLY in simple Roman Urdu (Urdu written in English letters), at most 6 short sentences: what this is, what to do, by when, how much, anything unusual.
 Use only the data below; personal details are hidden. If something is missing say "kaghaz par wazeh nahi". Never accuse a bill of fraud. Address the reader as "aap" only.`;
-const ROMAN_MED = `This is a medicine paper: give no advice of your own, only what is printed, and end with "Doctor ya pharmacist se tasdeeq karein".`;
+const ROMAN_MED = `This is a medicine paper: give no advice of your own, only what is printed (name, what it is for, strength). Do not mention money or deadlines, and do not list missing items one by one; instead write one sentence: "Kitni aur kab khani hai, yeh doctor ya pharmacist se poochein." At most 3 sentences.`;
 
 const EN = `You explain papers to elderly people in very simple English, at most 6 short sentences: what this is, what to do, by when, how much, anything unusual.
 Use only the data below; personal details are hidden. If something is missing say "not clear on the paper". Never accuse a bill of fraud.`;
-const EN_MED = `This is a medicine paper: give no advice of your own, only what is printed, and end with "Please confirm with a doctor or pharmacist."`;
+const EN_MED = `This is a medicine paper: give no advice of your own, only what is printed (name, what it is for, strength). Do not mention money or deadlines, and do not list missing items one by one; instead write one sentence: "Ask a doctor or pharmacist how much to take and when." At most 3 sentences.`;
 
 export function explainPrompt(p: CloudPayload, note?: string): string {
   let head = p.language === 'ur' ? UR : p.language === 'roman_ur' ? ROMAN : EN;
