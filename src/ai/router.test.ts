@@ -106,3 +106,19 @@ describe('cloud payload', () => {
     expect(billNote(ex)).toMatch(/higher than the average/);
   });
 });
+
+import { sanitizeExtraction as _san } from './router';
+describe('sanitizeExtraction', () => {
+  const base = { title: 'x', private_values: [], text: '' };
+  it('drops private-by-label fields even when the value was misread', () => {
+    const ex = _san({ ...base, doc_type: 'bill', fields: [
+      { label: 'Consumer ID', value: '113302611' }, { label: 'Amount Due', value: '5568' }, { label: 'Name & Address', value: 'X Y' } ] } as never);
+    expect((ex as { fields: { label: string }[] }).fields.map((f) => f.label)).toEqual(['Amount Due']);
+  });
+  it('keeps only identifying medicine fields', () => {
+    const ex = _san({ ...base, doc_type: 'medicine', fields: [
+      { label: 'Brand Name', value: 'Panadol' }, { label: 'Active Ingredient', value: 'Paracetamol' },
+      { label: 'Dose', value: '1 tablet' }, { label: 'Maximum per day', value: '4' }, { label: 'expiry date', value: '11/2026' }, { label: 'Warnings', value: 'x' } ] } as never);
+    expect((ex as { fields: { label: string }[] }).fields.map((f) => f.label)).toEqual(['Brand Name', 'Active Ingredient']);
+  });
+});

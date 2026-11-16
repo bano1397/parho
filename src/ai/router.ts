@@ -32,7 +32,7 @@ export async function readDocument(
         const r = await d.engines.nanoRead(EXTRACT_PROMPT, image);
         const ex = parseExtraction(r.text);
         d.log({ step: 'read', engine: 'nano', reason: 'Gemini Nano is ready on this device — the photo never left it', ms: now() - t0 });
-        return { ...ex, source: 'nano' };
+        return sanitizeExtraction({ ...ex, source: 'nano' });
       } catch {
         // one retry, then fall back
       }
@@ -63,7 +63,24 @@ export async function readDocument(
     ms: now() - t2,
     bytes_out: new TextEncoder().encode(body).length,
   });
-  return { ...ex, text: redacted, source: 'cloud_from_ocr' };
+  return sanitizeExtraction({ ...ex, text: redacted, source: 'cloud_from_ocr' });
+}
+
+const PRIVATE_LABEL = /address|cnic|consumer|reference|ref\.?\s*no|account|acc\.?\s*no|meter\s*no|phone|mobile|email|customer\s*id/i;
+// Gemini Nano invents doses and dates that are not printed on small or blurry boxes, so a
+// medicine reading keeps only what identifies the medicine; the explanation sends people to the pharmacist.
+const MED_RISKY_LABEL = /dos|tablet|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every/i;
+
+/** Runs on the device: drops fields that are private by label, and medicine fields the model may have invented. */
+export function sanitizeExtraction<T extends Extraction>(ex: T): T {
+  const fields = ex.fields.filter((f) => {
+    if (PRIVATE_LABEL.test(f.label)) return false;
+    // On a medicine box "name" is the medicine; elsewhere it is a person.
+    if (ex.doc_type !== 'medicine' && /name/i.test(f.label)) return false;
+    if (ex.doc_type === 'medicine' && MED_RISKY_LABEL.test(f.label)) return false;
+    return !/^(not specified|n\/a|none|unknown)$/i.test(f.value.trim());
+  });
+  return { ...ex, fields };
 }
 
 /** Builds the ONLY object that may go to the cloud for the explanation. Throws PrivacyBlocked. */
@@ -72,7 +89,7 @@ export function buildCloudPayload(ex: Extraction, language: CloudPayload['langua
   const payload: CloudPayload = {
     doc_type: ex.doc_type,
     title: ex.title ? redact(ex.title, ex.private_values) : undefined,
-    fields: ex.fields
+    fields: sanitizeExtraction(ex).fields
       .map((f) => ({ label: f.label, value: redact(f.value, ex.private_values) }))
       .filter((f) => !/\[(NAME|CNIC|ADDRESS|ACCOUNT|PHONE|EMAIL|LONG_NUMBER)\]/.test(f.value)),
     redacted_text: redact(ex.text, ex.private_values).slice(0, 4000),

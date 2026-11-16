@@ -6,6 +6,8 @@ Return ONLY JSON that matches the schema.
 - title: the company or medicine name and document kind, e.g. "Electricity bill".
 - fields: the facts a person must act on, each {label, value, confidence}. For a bill: amount due, due date, amount after due date, units, billing month, previous months' units if printed. For a notice: what is demanded, deadline, amount, what happens if ignored (e.g. disconnection), and how or where to pay or respond. For medicine: name, strength, dose, maximum per day, warnings, expiry date.
 - Copy values exactly as printed. Never guess. If a character is unclear, set confidence "low".
+- Bills: "units" means the units CONSUMED this month (the box labelled UNITS), never a meter reading. Copy dates with the year exactly as printed (e.g. "24 NOV 26"); never change the year.
+- Medicine: give the brand name exactly as printed (e.g. "Panadol") and the active ingredient separately. Include dose, maximum per day, warnings or expiry ONLY if those words are clearly readable on the photo; otherwise leave that field out. Never write a dose from your own knowledge.
 - private_values: EVERY person name, CNIC, address, account/consumer/reference number, phone number and email, each with kind NAME, CNIC, ADDRESS, ACCOUNT, PHONE or EMAIL.
 - text: leave as an empty string "" (the app does not need it).
 Be brief: at most 10 fields.`;
