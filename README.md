@@ -44,7 +44,7 @@ npm run e2e     # 5 browser tests (Playwright + axe) on a test build with a fake
 ```
 
 
-**Real-world test (16 Nov 2026):** 6 real FESCO electricity bills and 2 medicine boxes, read by Gemini Nano on a MacBook: 21 of 22 key facts correct (95%): amount 6/6, due date 6/6, units 5/6, medicine name and ingredient 4/4. No private detail (name, address, consumer or reference number) reached the cloud, and no dose was shown for any medicine. The real bills are kept private and are not in this repo.
+**Real-world test (16 Nov 2026):** 6 real FESCO electricity bills and 2 medicine boxes, read by Gemini Nano on a MacBook. Across repeated runs, 19 to 21 of 22 key facts were correct (86–95%): due date 6/6 every run, amount 5–6/6, units 4–5/6, medicine name and ingredient 4/4. Nano's answers vary a little between runs, so the app always shows the reading for the person to check. No private detail (name, address, consumer or reference number) reached the cloud, and no dose was shown for any medicine. The real bills are kept private and are not in this repo.
 
 Firebase setup:
 1. Create a Firebase project and enable **AI Logic** with the **Gemini Developer API**.
