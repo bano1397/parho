@@ -132,3 +132,15 @@ describe('units check', () => {
     expect(b([{ label: 'Units', value: '31' }, { label: 'Previous Reading', value: '12630' }, { label: 'Current Reading', value: '12630' }])[0].value).toBe('31');
   });
 });
+
+describe('medicine allow-list', () => {
+  const m = (fields: { label: string; value: string }[]) => (_san({ title: 'x', private_values: [], text: '', doc_type: 'medicine', fields } as never) as { fields: { label: string }[] }).fields.map((f) => f.label);
+  it('drops dose lines whatever the label', () => {
+    expect(m([{ label: 'Do not take more than', value: '8 tablets in 24 hours.' }, { label: 'Directions', value: '2 tabs' },
+      { label: 'Adults', value: '1-2 tablets every 4-6 hours' }, { label: 'Manufacturing Date', value: '01-2026' }, { label: 'Retail Price', value: 'Rs 45' },
+      { label: 'Name', value: 'Panadol' }, { label: 'Strength', value: '500 mg' }, { label: 'Active Ingredient', value: 'Paracetamol' }])).toEqual(['Name', 'Strength', 'Active Ingredient']);
+  });
+  it('drops a safe-looking label that hides a dose in its value', () => {
+    expect(m([{ label: 'Indication', value: 'take 2 tablets every 6 hours' }])).toEqual([]);
+  });
+});

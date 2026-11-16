@@ -69,6 +69,7 @@ export async function readDocument(
 const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*no|account|acc\.?\s*no|meter\s*no|phone|mobile|email|customer\s*id/i;
 // Gemini Nano invents doses and dates that are not printed on small or blurry boxes, so a
 // medicine reading keeps only what identifies the medicine; the explanation sends people to the pharmacist.
+const MED_SAFE_LABEL = /^\s*(brand\s*)?(name|brand|title|medicine|product|drug|active[\s_]*ingredients?|ingredients?|generic(\s*name)?|composition|contains|strength|form|indications?|used\s*for|uses?)\s*$/i;
 const MED_RISKY_LABEL = /dos|tablet|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every/i;
 
 /** Runs on the device: drops fields that are private by label, and medicine fields the model may have invented. */
@@ -77,7 +78,9 @@ export function sanitizeExtraction<T extends Extraction>(ex: T): T {
     if (PRIVATE_LABEL.test(f.label)) return false;
     // On a medicine box "name" is the medicine; elsewhere it is a person.
     if (ex.doc_type !== 'medicine' && /name/i.test(f.label)) return false;
-    if (ex.doc_type === 'medicine' && MED_RISKY_LABEL.test(f.label)) return false;
+    // Medicine: allow-list. Only what identifies the medicine survives; any dose/limit/date line is dropped
+    // whatever the model called it, because a wrong dose is the one mistake Parho must never make.
+    if (ex.doc_type === 'medicine') return MED_SAFE_LABEL.test(f.label) && !MED_RISKY_LABEL.test(f.label + ' ' + f.value);
     return !/^(not specified|n\/a|none|unknown)$/i.test(f.value.trim());
   });
   return { ...ex, fields: ex.doc_type === 'bill' ? checkUnits(fields) : fields };
