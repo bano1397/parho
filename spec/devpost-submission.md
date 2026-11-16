@@ -17,7 +17,7 @@ Many people in Pakistan can't comfortably read the English printed on their elec
 - A timeline shows which engine ran each step, how long it took, and how many bytes were sent.
 
 ## How we built it
-React + TypeScript + Vite, Firebase AI Logic (hybrid inference), Firebase App Check (reCAPTCHA Enterprise), Firebase Hosting, tesseract.js, zod, Vitest + fast-check. The app works offline as a PWA.
+React + TypeScript + Vite, Firebase AI Logic (hybrid inference), Firebase App Check (reCAPTCHA Enterprise), Firebase Hosting, tesseract.js, zod, Vitest + fast-check. The app shell loads offline (PWA) and Nano reads without internet; the Urdu explanation needs a connection.
 
 ## Why hybrid
 The step that sees the photo is the private one, so it runs on the device. The step that needs Urdu, which Nano can't write, runs in the cloud, and it only gets data that has already been made safe.

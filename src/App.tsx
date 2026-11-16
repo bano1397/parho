@@ -161,7 +161,7 @@ export default function App() {
     <main>
       <header>
         <div>
-          <h1>Parho <span lang="ur" className="urdu" style={{ fontSize: '0.8em' }}>پڑھو</span></h1>
+          <h1>Parho <span lang="ur" dir="rtl" className="urdu" style={{ fontSize: '0.8em' }}>پڑھو</span></h1>
           <p className="sub">Photograph a bill, notice or medicine box. Parho reads it <b>on this device</b> and explains it in simple Urdu.</p>
         </div>
         <StatusChip nano={nano} online={online} />
@@ -293,7 +293,7 @@ export default function App() {
             <h2 id="exp">4. In simple words</h2>
             <span className="chip cloud">☁️ Cloud Gemini</span>
           </div>
-          <p className={lang === 'ur' ? 'urdu' : ''} lang={lang === 'ur' ? 'ur' : undefined} aria-live="polite" style={{ whiteSpace: 'pre-wrap' }}>{answer}</p>
+          <p className={lang === 'ur' ? 'urdu' : ''} lang={lang === 'ur' ? 'ur' : undefined} dir={lang === 'ur' ? 'rtl' : undefined} aria-live="polite" style={{ whiteSpace: 'pre-wrap' }}>{answer}</p>
           <div className="row">
             <button onClick={() => { if (!speak(answer, lang)) setError('No Urdu voice is installed on this device. Try Roman Urdu or English.'); }}>🔊 {t.listen}</button>
             <button className="ghost" onClick={stopSpeaking}>Stop</button>

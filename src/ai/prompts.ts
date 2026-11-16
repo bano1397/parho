@@ -22,21 +22,29 @@ OCR TEXT:
 
 const UR = `آپ ایک مددگار ہیں جو کم پڑھے لکھے بزرگوں کو کاغذات سمجھاتے ہیں۔ نیچے دیے گئے ڈیٹا میں ذاتی معلومات چھپا دی گئی ہیں۔
 صرف اسی ڈیٹا کی بنیاد پر، زیادہ سے زیادہ 6 آسان جملوں میں بتائیں: یہ کیا ہے، کیا کرنا ہے، کب تک، کتنی رقم، اور کوئی غیر معمولی بات۔
-جو معلومات موجود نہ ہو اس کے لیے لکھیں "کاغذ پر واضح نہیں"۔
-بل میں دھوکہ دہی کا الزام نہ لگائیں۔ کسی کو "بابا جی" یا "اماں جی" جیسے الفاظ سے مخاطب نہ کریں، سیدھا "آپ" لکھیں۔ صرف اردو میں جواب دیں۔`;
-const UR_MED = `یہ دوا کا کاغذ ہے: اپنی طرف سے کوئی مشورہ نہ دیں، صرف وہی بتائیں جو لکھا ہے (دوا کا نام، کس چیز کی دوا ہے، طاقت)۔ رقم یا تاریخ کا ذکر نہ کریں۔ جو باتیں موجود نہیں انہیں ایک ایک کر کے نہ گنوائیں؛ صرف ایک جملہ لکھیں: "کتنی اور کب کھانی ہے، یہ ڈاکٹر یا فارماسسٹ سے پوچھیں"۔ زیادہ سے زیادہ 3 جملے۔`;
+"کیا کرنا ہے" میں صرف وہی لکھیں جو کاغذ پر لکھا ہے۔ جو بات موجود نہ ہو اسے چھوڑ دیں؛ اگر رقم یا آخری تاریخ نہ ملے تو ایک بار لکھیں "یہ کاغذ پر واضح نہیں"۔
+کسی بل یا نوٹس پر دھوکے یا غلطی کا الزام نہ لگائیں، اور کوئی قانونی یا مالی مشورہ نہ دیں۔ کسی کو "بابا جی" یا "اماں جی" نہ کہیں، سیدھا "آپ" لکھیں۔ صرف اردو میں جواب دیں۔`;
+const UR_MED = `آپ ایک مددگار ہیں جو کم پڑھے لکھے بزرگوں کو دوا کا ڈبہ سمجھاتے ہیں۔ اپنی طرف سے کوئی مشورہ نہ دیں۔
+صرف نیچے دیا گیا ڈیٹا استعمال کریں: دوا کا نام، اس میں کون سی دوا ہے، اور کتنے ملی گرام کی ہے۔ یہ دوا کس بیماری کی ہے، اپنی طرف سے نہ بتائیں۔
+رقم یا تاریخ کا ذکر نہ کریں، اور جو باتیں موجود نہیں انہیں نہ گنوائیں۔ آخر میں یہ جملہ لکھیں: "کتنی اور کب کھانی ہے، یہ ڈاکٹر یا فارماسسٹ سے پوچھیں۔"
+زیادہ سے زیادہ 3 آسان جملے، "آپ" کہہ کر، صرف اردو میں۔`;
 
 const ROMAN = `You explain papers to elderly people with little schooling. Reply ONLY in simple Roman Urdu (Urdu written in English letters), at most 6 short sentences: what this is, what to do, by when, how much, anything unusual.
-Use only the data below; personal details are hidden. If something is missing say "kaghaz par wazeh nahi". Never accuse a bill of fraud. Address the reader as "aap" only.`;
-const ROMAN_MED = `This is a medicine paper: give no advice of your own, only what is printed (name, what it is for, strength). Do not mention money or deadlines, and do not list missing items one by one; instead write one sentence: "Kitni aur kab khani hai, yeh doctor ya pharmacist se poochein." At most 3 sentences.`;
+Use only the data below; personal details are hidden. "What to do" must be only what the paper says. Skip anything missing; if the amount or deadline is missing say once "kaghaz par wazeh nahi". Never accuse a bill or notice of fraud or mistakes, and give no legal or financial advice. Address the reader as "aap" only.`;
+const ROMAN_MED = `You explain a medicine box to elderly people with little schooling, in simple Roman Urdu only. Give no advice of your own.
+Use only the data below: the medicine's name, what it contains and its strength in mg. Do not say what illness it treats unless the data says so. Do not mention money or dates and do not list missing items.
+End with: "Kitni aur kab khani hai, yeh doctor ya pharmacist se poochein." At most 3 short sentences; address the reader as "aap".`;
 
 const EN = `You explain papers to elderly people in very simple English, at most 6 short sentences: what this is, what to do, by when, how much, anything unusual.
-Use only the data below; personal details are hidden. If something is missing say "not clear on the paper". Never accuse a bill of fraud.`;
-const EN_MED = `This is a medicine paper: give no advice of your own, only what is printed (name, what it is for, strength). Do not mention money or deadlines, and do not list missing items one by one; instead write one sentence: "Ask a doctor or pharmacist how much to take and when." At most 3 sentences.`;
+Use only the data below; personal details are hidden. "What to do" must be only what the paper says. Skip anything missing; if the amount or deadline is missing say once "not clear on the paper". Never accuse a bill or notice of fraud or mistakes, and give no legal or financial advice. Address the reader only as "you"; no titles like uncle or grandma.`;
+const EN_MED = `You explain a medicine box to elderly people in very simple English. Give no advice of your own.
+Use only the data below: the medicine's name, what it contains and its strength in mg. Do not say what illness it treats unless the data says so. Do not mention money or dates and do not list missing items.
+End with: "Ask a doctor or pharmacist how much to take and when." At most 3 short sentences; address the reader only as "you".`;
 
 export function explainPrompt(p: CloudPayload, note?: string): string {
-  let head = p.language === 'ur' ? UR : p.language === 'roman_ur' ? ROMAN : EN;
-  if (p.doc_type === 'medicine') head += '\n' + (p.language === 'ur' ? UR_MED : p.language === 'roman_ur' ? ROMAN_MED : EN_MED);
+  // Medicine gets its own prompt: the bill prompt asks "how much / by when", which must never be answered for a medicine.
+  const med = p.doc_type === 'medicine';
+  const head = p.language === 'ur' ? (med ? UR_MED : UR) : p.language === 'roman_ur' ? (med ? ROMAN_MED : ROMAN) : med ? EN_MED : EN;
   return `${head}\n\nDATA:\n${JSON.stringify({ doc_type: p.doc_type, title: p.title, fields: p.fields, text: p.redacted_text })}${
     note ? `\n\nNOTE FROM THE APP (computed on the device): ${note}` : ''
   }`;

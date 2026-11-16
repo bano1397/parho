@@ -15,17 +15,25 @@ export class PrivacyBlocked extends Error {
 /** Convert Urdu (۰-۹) and Arabic-Indic (٠-٩) digits to 0-9. */
 export function normaliseDigits(s: string): string {
   return s
+    .normalize('NFKC') // fullwidth ０-９ → 0-9
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '') // zero-width characters
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[०-९]/g, (d) => String(d.charCodeAt(0) - 0x0966))
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
 }
 
-// Separators people use inside numbers: space, hyphen, dot, en dash.
-const SEP = '[-\\s.–]?';
+// Separators people use inside numbers: spaces around one hyphen, dot, slash or dash.
+const SEP = '\\s*[-.–—/]?\\s*';
 
 export const PATTERNS: { kind: PrivateKind; re: RegExp }[] = [
   { kind: 'CNIC', re: new RegExp(`(?<!\\d)\\d{5}${SEP}\\d{7}${SEP}\\d(?!\\d)`) },
-  { kind: 'PHONE', re: new RegExp(`(?<!\\d)(\\+?92${SEP}|0)3\\d{2}${SEP}\\d{7}(?!\\d)`) },
-  { kind: 'EMAIL', re: /[\w.+-]+@[\w-]+\.[\w.-]+/ },
+  { kind: 'CNIC', re: /(?<!\d)\d{4}\s\d{4}\s\d{4}\s\d(?!\d)/ },
+  { kind: 'PHONE', re: new RegExp(`(?<!\\d)(\\+\\s*92${SEP}|0092${SEP}|92${SEP}|\\(?0)\\s*3\\d{2}\\)?${SEP}\\d{3}${SEP}\\d{4}(?!\\d)`) },
+  { kind: 'PHONE', re: /(?<![\d-])0\d{2,3}\s*-\s*\d{7,8}(?!\d)/ }, // landline 042-35761234
+  { kind: 'EMAIL', re: /[\w.+-]+\s*(@|\[at\]|\(at\))\s*[\w-]+\s*\.\s*[a-z]{2,}(\.[a-z]{2,})*/i },
+  // Account/reference IDs mixing letters and 7+ digits, e.g. "LE-04-1234567-U".
+  { kind: 'LONG_NUMBER', re: /(?<![\w-])(?=[\w-]*[a-z])(?=(?:[\w-]*?\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\w-])/i },
   { kind: 'LONG_NUMBER', re: /(?<!\d)\d{10,}(?!\d)/ },
 ];
 
@@ -46,7 +54,7 @@ export function findPrivate(text: string, knownValues: string[] = []): PrivateKi
 
 /** Lower-case and remove spaces/punctuation so "Ahmed  KHAN" matches "ahmed khan". */
 export function squash(s: string): string {
-  return s.toLowerCase().replace(/[\s\-.,_/–]+/g, '');
+  return s.toLowerCase().replace(/[\s\-.,_/–—'’()\u200B-\u200D]+/g, '');
 }
 
 /** Throws PrivacyBlocked if the payload contains anything private. */

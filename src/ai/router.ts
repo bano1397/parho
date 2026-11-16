@@ -66,37 +66,75 @@ export async function readDocument(
   return sanitizeExtraction({ ...ex, text: redacted, source: 'cloud_from_ocr' });
 }
 
-const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*no|account|acc\.?\s*no|meter\s*no|phone|mobile|email|customer\s*id/i;
-// Gemini Nano invents doses and dates that are not printed on small or blurry boxes, so a
-// medicine reading keeps only what identifies the medicine; the explanation sends people to the pharmacist.
-const MED_SAFE_LABEL = /^\s*(brand\s*)?(name|brand|title|medicine|product|drug|active[\s_]*ingredients?|ingredients?|generic(\s*name)?|composition|contains|strength|form|indications?|used\s*for|uses?)\s*$/i;
-const MED_RISKY_LABEL = /dos|tablet|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every/i;
+const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*(no|#)|account|acc\.?\s*(no|#)|meter\s*(no|#|number)|phone|mobile|email|customer|cust\.?\s*(no|#|id)?\b|recipient|holder|addressee|applicant|student|patient|father|husband|s\/o|d\/o|w\/o|bill\s*of|\bid\b/i;
+// Gemini Nano invents doses and dates that are not printed on small or blurry boxes, so a medicine
+// reading keeps only what identifies the medicine; the explanation sends people to the pharmacist.
+const MED_SAFE_LABEL = /^\s*(brand\s*)?(name|brand|title|product|drug|active[\s_]*ingredients?|ingredients?|generic(\s*name)?|composition|contains|strength|form|(medicine|drug|product|dawai|dawa)\s*(ka\s*)?(name|naam)?)\s*$/i;
+const MED_RISKY_LABEL = /dos|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every|usage|use|indicat|for\b/i;
+// Anything that looks like a schedule, amount per time, limit, date or warning in a medicine VALUE.
+const MED_RISKY_VALUE = /\d\s*\+\s*\d|\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\b|\bx\s*\d|\d\s*x\b|times|daily|hours?|hrs?|days?|weeks?|\/\s*kg|exceed|before|until|\d{1,2}\s*[/-]\s*\d{2,4}|child|adult|pregnan|take|tablets?\s+every|every|baar|roz|din\b|گولی|روزانہ|بار|دن|خوراک|warning|caution|do not|don't|avoid/i;
+const STRENGTH_RE = /^\s*\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|%|iu)(\s*\/\s*\d*\s*(ml|g|tab(let)?))?\s*$/i;
+const FORM_RE = /^\s*(tablets?|capsules?|syrup|suspension|drops?|cream|ointment|gel|injection|sachets?|inhaler|spray)\s*$/i;
+
+function medicineFieldOk(f: { label: string; value: string }): boolean {
+  if (!MED_SAFE_LABEL.test(f.label) || MED_RISKY_LABEL.test(f.label)) return false;
+  if (/strength/i.test(f.label)) return STRENGTH_RE.test(f.value);
+  if (/^\s*form\s*$/i.test(f.label)) return FORM_RE.test(f.value);
+  if (MED_RISKY_VALUE.test(f.value)) return false;
+  // Names/ingredients may carry a strength ("Paracetamol 500 mg") but no other numbers.
+  const rest = f.value.replace(/\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|%|iu)\b/gi, '');
+  return !/\d/.test(rest);
+}
 
 /** Runs on the device: drops fields that are private by label, and medicine fields the model may have invented. */
 export function sanitizeExtraction<T extends Extraction>(ex: T): T {
   const fields = ex.fields.filter((f) => {
+    if (/^(not specified|not readable|n\/a|none|unknown|-)?$/i.test(f.value.trim())) return false;
+    // Medicine: allow-list. A wrong dose is the one mistake Parho must never make.
+    if (ex.doc_type === 'medicine') return medicineFieldOk(f);
     if (PRIVATE_LABEL.test(f.label)) return false;
     // On a medicine box "name" is the medicine; elsewhere it is a person.
-    if (ex.doc_type !== 'medicine' && /name/i.test(f.label)) return false;
-    // Medicine: allow-list. Only what identifies the medicine survives; any dose/limit/date line is dropped
-    // whatever the model called it, because a wrong dose is the one mistake Parho must never make.
-    if (ex.doc_type === 'medicine') return MED_SAFE_LABEL.test(f.label) && !MED_RISKY_LABEL.test(f.label + ' ' + f.value);
-    return !/^(not specified|n\/a|none|unknown)$/i.test(f.value.trim());
+    return !/name|naam/i.test(f.label);
   });
   return { ...ex, fields: ex.doc_type === 'bill' ? checkUnits(fields) : fields };
 }
 
-/** On a bill, units used = present reading − previous reading. If the model's "units" disagrees, trust the arithmetic. */
+const toNum = (v?: string) => {
+  if (v === undefined) return NaN;
+  const m = v.replace(/[,\s]/g, '').match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : NaN;
+};
+const UNITS_LABEL = /^\s*(current\s*|billed\s*|net\s*|total\s*)?units?\s*(consumed|used|billed)?\s*(\(.*\))?\s*$/i;
+
+/** On a bill, units used = (present − previous reading) × MF. If the model's "units" disagrees, trust the arithmetic.
+ *  Skips anything it cannot be sure about: gas units, decimals, unreadable multipliers. */
 function checkUnits<F extends { label: string; value: string }>(fields: F[]): F[] {
-  const num = (f?: F) => (f ? Number(f.value.replace(/[^\d]/g, '')) : NaN);
+  const all = fields.map((f) => `${f.label} ${f.value}`).join(' ');
+  if (/gas|hm3|mmbtu|\bm3\b|cubic/i.test(all)) return fields;
   const prev = fields.find((f) => /prev\w*\s*reading/i.test(f.label));
   const cur = fields.find((f) => /(present|current)\s*reading/i.test(f.label));
-  const diff = num(cur) - num(prev);
+  if (!prev || !cur || /\./.test(prev.value + cur.value)) return fields;
+  const mfField = fields.find((f) => /^\s*(mf|multiplying\s*factor|multiplier)\s*$/i.test(f.label));
+  const mf = mfField ? toNum(mfField.value) : 1;
+  if (!(mf >= 1) || !Number.isInteger(mf)) return fields;
+  const diff = (toNum(cur.value) - toNum(prev.value)) * mf;
   if (!(diff > 0 && diff < 100000)) return fields;
-  const i = fields.findIndex((f) => /^\s*(current\s*)?units?\s*(consumed|used)?\s*$/i.test(f.label));
-  if (i >= 0 && num(fields[i]) === diff) return fields;
-  const fixed = { ...(i >= 0 ? fields[i] : prev!), label: 'Units', value: String(diff) } as F;
+  const i = fields.findIndex((f) => UNITS_LABEL.test(f.label));
+  if (i >= 0 && (/\./.test(fields[i].value) || toNum(fields[i].value) === diff)) return fields;
+  const fixed = { ...(i >= 0 ? fields[i] : prev), label: 'Units', value: String(diff) } as F;
   return i >= 0 ? fields.map((f, k) => (k === i ? fixed : f)) : [...fields, fixed];
+}
+
+/** A title the cloud may see: a fixed phrase per document type, never the model's free text (it can hold a name). */
+function safeTitle(ex: Extraction): string | undefined {
+  const t = `${ex.title ?? ''} ${ex.fields.map((f) => f.label).join(' ')}`;
+  if (ex.doc_type === 'medicine') {
+    const name = ex.fields.find((f) => /name|brand|product|drug|title/i.test(f.label));
+    return name ? name.value : 'Medicine';
+  }
+  if (ex.doc_type === 'bill') return /gas|sngpl|ssgc/i.test(t) ? 'Gas bill' : /water|wasa/i.test(t) ? 'Water bill' : /electric|bijli|lesco|iesco|fesco|mepco|gepco|pesco|hesco|sepco|qesco|tesco|k-?electric|units|kwh/i.test(t) ? 'Electricity bill' : 'Bill';
+  if (ex.doc_type === 'notice') return 'Notice';
+  return 'Document';
 }
 
 /** Builds the ONLY object that may go to the cloud for the explanation. Throws PrivacyBlocked. */
@@ -104,11 +142,12 @@ export function buildCloudPayload(ex: Extraction, language: CloudPayload['langua
   const known = ex.private_values.map((p) => p.value);
   const payload: CloudPayload = {
     doc_type: ex.doc_type,
-    title: ex.title ? redact(ex.title, ex.private_values) : undefined,
+    title: safeTitle(sanitizeExtraction(ex)),
     fields: sanitizeExtraction(ex).fields
-      .map((f) => ({ label: f.label, value: redact(f.value, ex.private_values) }))
+      .map((f) => ({ label: redact(f.label, ex.private_values), value: redact(f.value, ex.private_values) }))
       .filter((f) => !/\[(NAME|CNIC|ADDRESS|ACCOUNT|PHONE|EMAIL|LONG_NUMBER)\]/.test(f.value)),
-    redacted_text: redact(ex.text, ex.private_values).slice(0, 4000),
+    // Medicine: the explanation gets only the safe fields, never the raw text with its dose lines.
+    redacted_text: ex.doc_type === 'medicine' ? '' : redact(ex.text, ex.private_values).slice(0, 4000),
     language,
   };
   assertClean(payload, known);
@@ -118,12 +157,18 @@ export function buildCloudPayload(ex: Extraction, language: CloudPayload['langua
 /** Computed on the device: does this bill jump sharply compared to earlier months? */
 export function billNote(ex: Extraction): string | undefined {
   if (ex.doc_type !== 'bill') return undefined;
-  const num = (s: string) => Number(s.replace(/[^\d.]/g, ''));
-  const units = ex.fields.find((f) => /units?\s*(consumed)?$/i.test(f.label.trim()) && !/prev|last|history/i.test(f.label));
-  const history = ex.fields.filter((f) => /prev|last|history/i.test(f.label));
-  const past = history.flatMap((f) => (f.value.match(/\d{2,4}/g) ?? []).map(Number)).filter((n) => n > 0 && n < 5000);
+  const fields = sanitizeExtraction(ex).fields;
+  const mf = toNum(fields.find((f) => /^\s*(mf|multiplying\s*factor|multiplier)\s*$/i.test(f.label))?.value);
+  if (mf > 1) return undefined; // units and history may be on different bases
+  const units = fields.find((f) => UNITS_LABEL.test(f.label) && !/prev|last|history/i.test(f.label));
+  const hist = fields.filter((f) => /prev|last|history/i.test(f.label) && !/reading/i.test(f.label));
+  // If a full history exists, ignore a separate "previous month" field so that month is not counted twice.
+  const history = hist.some((f) => /history/i.test(f.label)) ? hist.filter((f) => /history/i.test(f.label)) : hist;
+  const past = history
+    .flatMap((f) => (f.value.replace(/[a-z]{3,9}(?:[-'’]?\d{2}|\.?\s*[-'’]?\s*(?:19|20)\d{2})(?!\d)/gi, ' ').match(/\d{1,5}/g) ?? []).map(Number))
+    .filter((n) => n > 0 && n < 5000 && !(n >= 1990 && n <= 2100));
   if (!units || past.length === 0) return undefined;
-  const cur = num(units.value);
+  const cur = toNum(units.value);
   const avg = past.reduce((a, b) => a + b, 0) / past.length;
   if (!cur || !avg) return undefined;
   const ratio = (cur - avg) / avg;
