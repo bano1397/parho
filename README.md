@@ -39,7 +39,7 @@ Requirements: Node 20+, and desktop Chrome 139+ for on-device AI. For image inpu
 npm install
 cp .env.example .env.local   # fill in your Firebase web config + App Check keys
 npm run dev
-npm test        # 77 unit, property-based and audit-regression tests
+npm test        # 99 unit, property-based and audit-regression tests
 npm run e2e     # 5 browser tests (Playwright + axe) on a test build with a fake cloud
 ```
 

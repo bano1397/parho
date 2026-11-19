@@ -19,13 +19,16 @@ const LABELLED: { kind: PrivateValue['kind']; re: RegExp }[] = [
   // Short labels ("To", "Name", "Patient") need a colon so "To pay: Rs 500" is never touched.
   { kind: 'NAME', re: /^(\s*(?:(?:to|name|patient|bill\s*to)\s*:|(?:consumer(?:'s)?|customer|father(?:'s)?|patient)\s*name\s*[:\-–.]?|s\/o|d\/o|w\/o|mr\.?|mrs\.?|ms\.?|نام\s*:?|بنام)\s*)(?!\s*\[)(\S.*)$/gim },
   { kind: 'NAME', re: /^(\s*dear\s+)(?!\[)([^,\n]+)/gim },
-  { kind: 'ADDRESS', re: /^(\s*(?:address|addr\.?|service\s*address|postal\s*address|پتہ)\s*[:\-–.]?\s*)(?!\[)(\S.*)$/gim },
+  // Name labels without a colon ("Naam Ahmed Khan", "Bill To Ahmed Khan") only when a capitalised or Urdu word follows.
+  { kind: 'NAME', re: /^(\s*(?:name(?!\s*of\b)|naam|bill\s*to|account\s*title|title\s*of\s*account|holder|walid|wald|sender)\s*[:\-–.]?\s*)(?!\[)((?:\p{Lu}|[\u0600-\u06FF]).*)$/gimu },
+  { kind: 'NAME', re: /^(\s*(?:ولد|بنت|زوجہ|ولدیت\s*:?)\s*)(?!\[)(\S.*)$/gmu },
+  { kind: 'ADDRESS', re: /^(\s*(?:address|addr\.?|service\s*address|postal\s*address|pata|پتہ|پتا)\s*[:\-–.]?\s*)(?!\[)(\S.*)$/gim },
   // ID labels anywhere in a line, not only at its start: "Consumer 041234567 due", "Ref: LE-04-1234567-U".
-  { kind: 'ACCOUNT', re: /(\b(?:account\s*(?:no|#|number|id)|acc\.?\s*(?:no|#)|a\/c\s*(?:no|#)?|consumer(?:\s*(?:no|id|#|number))?|reference\s*(?:no|#|number)?|ref\.?\s*(?:no|#)?|customer\s*(?:id|no|#)|cust\.?\s*(?:id|no|#)|meter\s*(?:no|#|number))\.?\s*[:\-–.]?\s*)(?!\[)((?=[\w-]*\d)[\w-]{5,}(?:\s\d{3,})*)/gim },
+  { kind: 'ACCOUNT', re: /(\b(?:account\s*(?:no|#|number|id)|acc\.?\s*(?:no|#)|a\/c\s*(?:no|#)?|consumer(?:\s*(?:no|id|#|number))?|reference\s*(?:no|#|number)?|ref\.?\s*(?:no|#)?|customer\s*(?:id|no|#)|cust\.?\s*(?:id|no|#)|meter(?:\s*(?:no|#|number))?|ac\.?\s*(?:no|#)|iban)\.?\s*[:\-–.]?\s*)(?!\[)(\d[\d\s-]{6,}\d(?:\s?[A-Z]\b)?|(?=[\w-]*\d)[\w-]{5,}(?:\s\d{3,})*)/gim },
 ];
 
 // Address words common on Pakistani paperwork; the rest of that line segment is treated as an address.
-const ADDRESS_WORDS = /\b(?:house|h\.\s*no|h#|street|st\.\s*no|gali|block|sector|mohalla|muhalla|chak|ck\s*no|village|tehsil|colony|town|phase)\b\.?\s*(?:no\.?|#)?\s*[\w-]*[^,\n]{0,60}/gi;
+const ADDRESS_WORDS = /\b(?:house|h\.\s*no|h#|street|st\.\s*no|gali|block|sector|mohalla|muhalla|chak|ck\s*no|village|tehsil|colony|town|phase|plot|dha|road)\b\.?\s*(?:no\.?|#)?\s*[\w-]*[^,\n]{0,60}/gi;
 
 export function redactLabelledLines(text: string): string {
   let out = text;

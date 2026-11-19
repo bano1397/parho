@@ -10,6 +10,12 @@ export function pickVoice(voices: { lang: string; name: string }[], lang: 'ur' |
   return null;
 }
 
+// Chrome loads voices asynchronously; start loading early so the first tap finds them.
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  speechSynthesis.getVoices();
+  speechSynthesis.addEventListener?.('voiceschanged', () => speechSynthesis.getVoices());
+}
+
 export function speak(text: string, lang: 'ur' | 'roman_ur' | 'en'): boolean {
   if (!('speechSynthesis' in window)) return false;
   speechSynthesis.cancel();

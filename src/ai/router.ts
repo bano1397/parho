@@ -1,7 +1,7 @@
 // Router: decides where each step runs and records why (shown to the user as a timeline).
 // Rule: the PHOTO is only ever processed on this device. The cloud only gets redacted text.
 import type { Engines } from './engines';
-import { EXTRACT_PROMPT, STRUCTURE_FROM_TEXT_PROMPT, explainPrompt } from './prompts';
+import { EXTRACT_PROMPT, STRUCTURE_FROM_TEXT_PROMPT, explainPrompt, MED_END } from './prompts';
 import { parseExtraction, type CloudPayload, type Extraction, type TimelineEntry } from './schema';
 import { redact } from '../privacy/redact';
 import { assertClean } from '../privacy/safetyNet';
@@ -66,13 +66,13 @@ export async function readDocument(
   return sanitizeExtraction({ ...ex, text: redacted, source: 'cloud_from_ocr' });
 }
 
-const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*(no|#)|account|acc\.?\s*(no|#)|meter\s*(no|#|number)|phone|mobile|email|customer|cust\.?\s*(no|#|id)?\b|recipient|holder|addressee|applicant|student|patient|father|husband|s\/o|d\/o|w\/o|bill\s*of|\bid\b/i;
+const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*(no|#)|account|acc\.?\s*(no|#)|meter\s*(no|#|number)|phone|mobile|email|customer|cust\.?\s*(no|#|id)?\b|recipient|holder|addressee|applicant|student|patient|father|husband|s\/o|d\/o|w\/o|bill\s*of|\bid\b|pata|walid|wald|sender|^\s*(to|from)\s*$|account\s*title|iban/i;
 // Gemini Nano invents doses and dates that are not printed on small or blurry boxes, so a medicine
 // reading keeps only what identifies the medicine; the explanation sends people to the pharmacist.
 const MED_SAFE_LABEL = /^\s*(brand\s*)?(name|brand|title|product|drug|active[\s_]*ingredients?|ingredients?|generic(\s*name)?|composition|contains|strength|form|(medicine|drug|product|dawai|dawa)\s*(ka\s*)?(name|naam)?)\s*$/i;
 const MED_RISKY_LABEL = /dos|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every|usage|use|indicat|for\b/i;
 // Anything that looks like a schedule, amount per time, limit, date or warning in a medicine VALUE.
-const MED_RISKY_VALUE = /\d\s*\+\s*\d|\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\b|\bx\s*\d|\d\s*x\b|times|daily|hours?|hrs?|days?|weeks?|\/\s*kg|exceed|before|until|\d{1,2}\s*[/-]\s*\d{2,4}|child|adult|pregnan|take|tablets?\s+every|every|baar|roz|din\b|گولی|روزانہ|بار|دن|خوراک|warning|caution|do not|don't|avoid/i;
+const MED_RISKY_VALUE = /\d\s*\+\s*\d|\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\b|\bx\s*\d|\d\s*x\b|times|daily|hours?|hrs?|days?|weeks?|\/\s*kg|exceed|before|until|\d{1,2}\s*[/-]\s*\d{2,4}|child|adult|pregnan|take|tablets?\s+every|every|baar|roz|din\b|گولی|روزانہ|بار|دن|خوراک|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات/i;
 const STRENGTH_RE = /^\s*\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|%|iu)(\s*\/\s*\d*\s*(ml|g|tab(let)?))?\s*$/i;
 const FORM_RE = /^\s*(tablets?|capsules?|syrup|suspension|drops?|cream|ointment|gel|injection|sachets?|inhaler|spray)\s*$/i;
 
@@ -189,5 +189,8 @@ export async function explain(payload: CloudPayload, ex: Extraction, d: Pick<Rea
     ms: now() - t0,
     bytes_out: new TextEncoder().encode(prompt).length,
   });
-  return r.text.trim();
+  const text = r.text.trim();
+  if (payload.doc_type !== 'medicine') return text;
+  // The pharmacist line is a safety rule, so it is enforced here, not left to the model.
+  return /pharmacist|فارماسسٹ/i.test(text) ? text : `${text}\n${MED_END[payload.language]}`;
 }

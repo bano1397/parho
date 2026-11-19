@@ -15,15 +15,15 @@ type Lang = CloudPayload['language'];
 type Phase = 'idle' | 'reading' | 'confirm-ocr' | 'read' | 'explaining' | 'explained';
 
 const SAMPLES = [
-  { file: 'sample_bill.png', label: 'Electricity bill' },
-  { file: 'sample_notice.png', label: 'Gas notice' },
-  { file: 'sample_medicine.png', label: 'Medicine box' },
+  { file: 'sample_bill.png', label: 'Electricity bill', ur: 'بجلی کا بل' },
+  { file: 'sample_notice.png', label: 'Gas notice', ur: 'گیس کا نوٹس' },
+  { file: 'sample_medicine.png', label: 'Medicine box', ur: 'دوا کا ڈبہ' },
 ];
 
 const T = {
-  ur: { take: 'تصویر لیں', choose: 'تصویر چنیں', send: 'کلاؤڈ کو بھیجیں', listen: 'سنائیں' },
-  roman_ur: { take: 'Tasveer lein', choose: 'Tasveer chunein', send: 'Cloud ko bhejein', listen: 'Sunao' },
-  en: { take: 'Take a photo', choose: 'Choose a photo', send: 'Send to cloud', listen: 'Read aloud' },
+  ur: { take: 'تصویر لیں', choose: 'تصویر چنیں', send: 'کلاؤڈ کو بھیجیں', sendExplain: 'بھیجیں اور سمجھائیں', listen: 'سنائیں', noVoice: 'اس آلے میں اردو آواز موجود نہیں۔ رومن اردو یا انگریزی آزمائیں۔ (No Urdu voice on this device.)' },
+  roman_ur: { take: 'Tasveer lein', choose: 'Tasveer chunein', send: 'Cloud ko bhejein', sendExplain: 'Bhejein aur samjhayein', listen: 'Sunayein', noVoice: 'No voice found on this device. Try English.' },
+  en: { take: 'Take a photo', choose: 'Choose a photo', send: 'Send to cloud', sendExplain: 'Send & explain', listen: 'Read aloud', noVoice: 'No voice found on this device.' },
 };
 
 function friendly(e: unknown): string {
@@ -32,7 +32,8 @@ function friendly(e: unknown): string {
   const m = String((e as Error)?.message ?? e);
   if (/429|quota|exhausted/i.test(m)) return 'The free cloud limit is used up for now. Please try again in a minute.';
   if (/\b50[023]\b|busy|overload|high demand|timed out/i.test(m)) return 'The cloud is busy right now. Your reading is safe on this device — try “Explain” again in a moment.';
-  if (/app.?check|403|permission/i.test(m)) return 'This copy of Parho is not verified with Firebase App Check, so the cloud refused. (Developer: register the debug token.)';
+  if (/throttle/i.test(m)) return 'The cloud security check failed too many times in this browser, so it is paused for a while. Your reading is safe on this device. Please try again later or in another browser.';
+  if (/app.?check|403|permission/i.test(m)) return 'The cloud security check (Firebase App Check) did not pass in this browser, so nothing was sent. Please reload the page and try again.';
   if (!navigator.onLine) return 'You are offline. The reading worked on this device; the explanation will need internet.';
   return 'Something went wrong: ' + m;
 }
@@ -54,6 +55,8 @@ export default function App() {
   const [ocrPreview, setOcrPreview] = useState('');
   const confirmRef = useRef<((ok: boolean) => void) | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const running = useRef(false);
+  const lastUrl = useRef<string | null>(null);
   const camRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,6 +66,13 @@ export default function App() {
     addEventListener('offline', on);
     return () => { removeEventListener('online', on); removeEventListener('offline', on); };
   }, []);
+
+  // If Chrome reports a download already in progress (or one was interrupted), keep checking instead of freezing.
+  useEffect(() => {
+    if (nano !== 'downloading' || dl !== null) return;
+    const id = setInterval(() => realEngines.nanoStatus().then(setNano), 3000);
+    return () => clearInterval(id);
+  }, [nano, dl]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('large', large);
@@ -93,6 +103,8 @@ export default function App() {
   const [ocrStatus, setOcrStatus] = useState<{ msg: string; p: number } | null>(null);
 
   async function handle(file: Blob) {
+    if (running.current) return; // ignore double clicks
+    running.current = true;
     reset();
     try {
       checkFile(file);
@@ -100,6 +112,8 @@ export default function App() {
       setOcrStatus(null);
       onOcrProgress((msg, p) => setOcrStatus({ msg, p }));
       const img = await prepare(file);
+      if (lastUrl.current) URL.revokeObjectURL(lastUrl.current);
+      lastUrl.current = img.url;
       setPreview(img.url);
       const result = await readDocument(img, {
         engines: realEngines,
@@ -123,6 +137,8 @@ export default function App() {
     } catch (e) {
       if (!(e instanceof UserCancelled)) setError(friendly(e));
       setPhase(ex ? 'read' : 'idle');
+    } finally {
+      running.current = false;
     }
   }
 
@@ -133,8 +149,14 @@ export default function App() {
   }
 
   async function onSample(file: string) {
-    const r = await fetch(`/samples/${file}`);
-    await handle(await r.blob());
+    if (running.current) return;
+    try {
+      const r = await fetch(`/samples/${file}`);
+      if (!r.ok) throw new Error(`sample ${r.status}`);
+      await handle(await r.blob());
+    } catch (e) {
+      setError(friendly(e));
+    }
   }
 
   async function doExplain() {
@@ -200,7 +222,7 @@ export default function App() {
           {SAMPLES.map((s) => (
             <button key={s.file} onClick={() => onSample(s.file)} disabled={busy}>
               <img src={`/samples/${s.file}`} alt="" />
-              {s.label}
+              {s.label} <span lang="ur" dir="rtl" className="urdu">{s.ur}</span>
             </button>
           ))}
         </div>
@@ -261,6 +283,7 @@ export default function App() {
           <button className="linkish" onClick={() => {
             const b = new Blob([JSON.stringify({ ...ex, timeline }, null, 2)], { type: 'application/json' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'parho-reading.json'; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
           }}>Save this reading (JSON, stays on your computer)</button>
           <p className="muted">{Math.max(ex.private_values.length, (ex.text.match(/\[(NAME|CNIC|ADDRESS|ACCOUNT|PHONE|EMAIL|LONG_NUMBER)\]/g) ?? []).length)} private detail(s) found and kept on this device.</p>
         </section>
@@ -271,7 +294,7 @@ export default function App() {
           <h2 id="cloud">3. What the cloud will see</h2>
           <div className="row">
             <label>Language
-              <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
+              <select value={lang} onChange={(e) => { setLang(e.target.value as Lang); setAnswer(''); stopSpeaking(); }}>
                 <option value="ur">اردو (Urdu)</option>
                 <option value="roman_ur">Roman Urdu</option>
                 <option value="en">English</option>
@@ -280,7 +303,7 @@ export default function App() {
             <span className="muted">{bytes} bytes · text only · no photo</span>
           </div>
           <pre className="payload">{payloadText}</pre>
-          <button onClick={doExplain} disabled={busy || !online}>☁️ {t.send} &amp; explain</button>
+          <button onClick={doExplain} disabled={busy || !online}>☁️ <span lang={lang === 'ur' ? 'ur' : undefined} dir={lang === 'ur' ? 'rtl' : undefined}>{t.sendExplain}</span></button>
           {!online && <p className="muted">Offline — connect to the internet to get the explanation.</p>}
         </section>
       )}
@@ -295,7 +318,7 @@ export default function App() {
           </div>
           <p className={lang === 'ur' ? 'urdu' : ''} lang={lang === 'ur' ? 'ur' : undefined} dir={lang === 'ur' ? 'rtl' : undefined} aria-live="polite" style={{ whiteSpace: 'pre-wrap' }}>{answer}</p>
           <div className="row">
-            <button onClick={() => { if (!speak(answer, lang)) setError('No Urdu voice is installed on this device. Try Roman Urdu or English.'); }}>🔊 {t.listen}</button>
+            <button onClick={() => { if (!speak(answer, lang)) setError(t.noVoice); }}>🔊 {t.listen}</button>
             <button className="ghost" onClick={stopSpeaking}>Stop</button>
           </div>
           <p className="muted">Parho explains what is printed. It is not medical, legal or financial advice.</p>
@@ -320,8 +343,8 @@ export default function App() {
       <section className="card">
         <h2>Settings</h2>
         <div className="row">
-          <label><input type="checkbox" checked={large} onChange={(e) => setLarge(e.target.checked)} /> Large text</label>
-          <label><input type="checkbox" checked={contrast} onChange={(e) => setContrast(e.target.checked)} /> High contrast</label>
+          <label><input type="checkbox" checked={large} onChange={(e) => setLarge(e.target.checked)} /> Large text <span lang="ur" dir="rtl" className="urdu">بڑا متن</span></label>
+          <label><input type="checkbox" checked={contrast} onChange={(e) => setContrast(e.target.checked)} /> High contrast <span lang="ur" dir="rtl" className="urdu">زیادہ واضح رنگ</span></label>
         </div>
       </section>
 

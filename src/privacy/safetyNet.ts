@@ -31,6 +31,10 @@ export const PATTERNS: { kind: PrivateKind; re: RegExp }[] = [
   { kind: 'CNIC', re: /(?<!\d)\d{4}\s\d{4}\s\d{4}\s\d(?!\d)/ },
   { kind: 'PHONE', re: new RegExp(`(?<!\\d)(\\+\\s*92${SEP}|0092${SEP}|92${SEP}|\\(?0)\\s*3\\d{2}\\)?${SEP}\\d{3}${SEP}\\d{4}(?!\\d)`) },
   { kind: 'PHONE', re: /(?<![\d-])0\d{2,3}\s*-\s*\d{7,8}(?!\d)/ }, // landline 042-35761234
+  // CNIC with misplaced hyphens or OCR-spaced digits: any 13 digits joined by single spaces/hyphens.
+  { kind: 'CNIC', re: /(?<![\d-])(?:\d[\s-]?){12}\d(?![\d-])/ },
+  { kind: 'EMAIL', re: /\b[\w.+-]+\s+at\s+[\w-]+\s+dot\s+(?:com|pk|net|org)\b/i },
+  { kind: 'LONG_NUMBER', re: /\bPK\s?\d{2}\s?[A-Z]{4}(?:\s?\d){16}\b/i }, // IBAN
   { kind: 'EMAIL', re: /[\w.+-]+\s*(@|\[at\]|\(at\))\s*[\w-]+\s*\.\s*[a-z]{2,}(\.[a-z]{2,})*/i },
   // Account/reference IDs mixing letters and 7+ digits, e.g. "LE-04-1234567-U".
   { kind: 'LONG_NUMBER', re: /(?<![\w-])(?=[\w-]*[a-z])(?=(?:[\w-]*?\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\w-])/i },

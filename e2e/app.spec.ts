@@ -34,7 +34,7 @@ async function mockCloud(page: Page, sent: string[]) {
 
 test('home page shows samples and status', async ({ page }) => {
   await mockCloud(page, []);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveTitle(/Parho/);
   for (const s of ['Electricity bill', 'Gas notice', 'Medicine box']) await expect(page.getByRole('button', { name: s })).toBeVisible();
   await expect(page.getByText(/On-device AI/)).toBeVisible();
@@ -43,7 +43,7 @@ test('home page shows samples and status', async ({ page }) => {
 test('fallback: private details are hidden before anything is sent, and Cancel sends nothing', async ({ page }) => {
   const sent: string[] = [];
   await mockCloud(page, sent);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Gas notice' }).click();
   const card = page.getByRole('heading', { name: /send redacted text/ });
   await expect(card).toBeVisible({ timeout: 150_000 });
@@ -58,12 +58,12 @@ test('fallback: private details are hidden before anything is sent, and Cancel s
 test('fallback full flow: structured, explained in Urdu, cloud never sees private data or the photo', async ({ page }) => {
   const sent: string[] = [];
   await mockCloud(page, sent);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Gas notice' }).click();
   await page.getByRole('button', { name: 'کلاؤڈ کو بھیجیں', exact: true }).click({ timeout: 150_000 });
   await expect(page.getByText('Rs 6,780').first()).toBeVisible();
   await expect(page.locator('.field', { hasText: '[NAME]' })).toHaveCount(0); // placeholder rows hidden
-  await page.getByRole('button', { name: /explain/ }).click();
+  await page.getByRole('button', { name: /explain|سمجھائیں/ }).click();
   await expect(page.getByText(/آخری نوٹس/)).toBeVisible();
   await expect(page.getByText(/How Parho handled this/)).toBeVisible();
   expect(sent.length).toBe(2);
@@ -74,13 +74,13 @@ test('fallback full flow: structured, explained in Urdu, cloud never sees privat
 });
 
 test('rejects a file that is not an image', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.locator('input[type=file]').first().setInputFiles({ name: 'x.txt', mimeType: 'text/plain', buffer: Buffer.from('hi') });
   await expect(page.getByText(/photo|image/i).first()).toBeVisible();
 });
 
 test('accessibility: no serious or critical axe violations', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   const r = await new AxeBuilder({ page }).analyze();
   const bad = r.violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
   expect(bad.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);

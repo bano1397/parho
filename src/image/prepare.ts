@@ -2,7 +2,7 @@ import { CONFIG } from '../config';
 
 export class InvalidPhoto extends Error {}
 
-export const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+export const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
 
 export function checkFile(f: { type: string; size: number }): void {
   if (!ACCEPTED.includes(f.type)) throw new InvalidPhoto('Please choose a JPG or PNG photo.');
@@ -17,10 +17,16 @@ export function scaledSize(w: number, h: number, max = CONFIG.MAX_SIDE_PX) {
 
 /** Decode (respecting EXIF rotation), shrink to ≤1600 px, re-encode as JPEG. Runs on this device. */
 export async function prepare(file: Blob): Promise<{ blob: Blob; base64: string; mimeType: string; url: string }> {
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  let bmp: ImageBitmap;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    throw new InvalidPhoto('This photo could not be opened. Please use a JPG or PNG photo.');
+  }
   const { w, h } = scaledSize(bmp.width, bmp.height);
   const canvas = new OffscreenCanvas(w, h);
   canvas.getContext('2d')!.drawImage(bmp, 0, 0, w, h);
+  bmp.close();
   const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
   const buf = new Uint8Array(await blob.arrayBuffer());
   let bin = '';

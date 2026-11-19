@@ -1,0 +1,79 @@
+1
+00:00:00,500 --> 00:00:06,500
+In Pakistan, millions of people get bills and medicine boxes they can't easily read.
+
+2
+00:00:06,500 --> 00:00:14,000
+To get help, they show the paper to someone else. That means sharing their name, address and CNIC.
+
+3
+00:00:14,000 --> 00:00:19,000
+Parho reads the paper on your own device. It hides your private details.
+
+4
+00:00:19,000 --> 00:00:24,000
+Then it explains the paper in simple Urdu.
+
+5
+00:00:24,000 --> 00:00:32,000
+The reader is Gemini Nano, running inside Chrome, through Firebase AI Logic's on-device mode.
+
+6
+00:00:40,000 --> 00:00:46,000
+Watch. I turn the Wi-Fi off.
+
+7
+00:00:46,000 --> 00:00:53,000
+Now I choose a real electricity bill, with private parts covered. Parho still reads it.
+
+8
+00:00:53,000 --> 00:01:03,000
+The amount, the due date, the units. All on this laptop, in about fifteen seconds.
+
+9
+00:01:05,000 --> 00:01:13,000
+With no internet, nothing can be sent. The cloud button simply waits.
+
+10
+00:01:15,000 --> 00:01:24,000
+Back online, with a sample notice. Before anything leaves, you see exactly what the cloud will get.
+
+11
+00:01:24,000 --> 00:01:32,000
+Text only, no photo. Names and CNIC numbers are replaced.
+
+12
+00:01:32,000 --> 00:01:43,000
+And a safety check in code blocks the request if a CNIC or phone number slips through.
+
+13
+00:01:45,000 --> 00:01:53,000
+Gemini Nano can't write Urdu yet. So only this step uses Gemini in the cloud.
+
+14
+00:01:53,000 --> 00:02:00,000
+The answer is short and simple. And it can be read aloud.
+
+15
+00:02:10,000 --> 00:02:21,000
+Parho shows how it handled every step. Which model ran, where, how long it took, and how many bytes left the device.
+
+16
+00:02:22,000 --> 00:02:33,000
+No Gemini Nano? Parho reads with on-device OCR instead. Then it asks before sending any redacted text.
+
+17
+00:02:34,000 --> 00:02:40,000
+We tested Parho on six real FESCO bills and two medicine boxes.
+
+18
+00:02:40,000 --> 00:02:45,000
+It got 86 to 95% of key facts right, with zero private details leaked.
+
+19
+00:02:45,000 --> 00:02:49,500
+The cloud gets under 1 KB of text, instead of a 600 KB photo.
+
+20
+00:02:49,500 --> 00:02:53,000
+Parho is open source. Read any paper, privately.

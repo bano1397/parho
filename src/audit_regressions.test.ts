@@ -1,3 +1,34 @@
+// 19 Nov 2026 seven-tester audit: privacy probe leaks.
+describe('privacy probe 19 Nov: these must never reach the cloud', () => {
+  it.each([
+    ['Consumer No 04 11234 1234567', /1234567/], ['Ref No. 12 11234 1234567 U', /1234567/],
+    ['CNIC 35202-123456-71', /123456/], ['C N I C: 3 5 2 0 2 1 2 3 4 5 6 7 1', /3 5 2 0 2/],
+    ['Name Ahmed Khan', /Ahmed/], ['naam: Ahmed Khan', /Ahmed/], ['Naam Ahmed Khan', /Ahmed/], ['Bill To Ahmed Khan', /Ahmed/],
+    ['Account Title: Ahmed Khan', /Ahmed/], ['Holder: Ahmed Khan', /Ahmed/], ['ولد محمد اسلم', /محمد/],
+    ['pata: Gulberg Lahore', /Gulberg/], ['Pata Model Road', /Model/], ['پتا: گلبرگ لاہور', /گلبرگ/], ['Plot 5 DHA Karachi', /Plot 5/],
+    ['Meter 123456', /123456/], ['Ac No 12345678', /12345678/], ['email ali at gmail dot com', /gmail/],
+    ['IBAN PK36SCBL0000001123456702', /SCBL|1123456702/],
+  ])('%s', (t, bad) => {
+    const out = redact(t);
+    expect(findPrivate(out)).toBeNull();
+    expect(out).not.toMatch(bad);
+  });
+  it('private-looking field labels are dropped on notices', () => {
+    const s = sendable(ex('notice', [{ label: 'Pata', value: 'Gulberg Lahore' }, { label: 'Walid', value: 'Ahmed Khan' },
+      { label: 'To', value: 'Ahmed Khan' }, { label: 'Sender', value: 'Ahmed Khan' }, { label: 'Amount', value: 'Rs 500' }]));
+    expect(s).not.toMatch(/Gulberg|Ahmed/);
+    expect(s).toMatch(/Rs 500/);
+  });
+  it('medicine dose words are dropped', () => {
+    const s = sendable(ex('medicine', [{ label: 'Composition', value: 'Paracetamol 500mg twice' }]));
+    expect(s).not.toMatch(/twice/);
+  });
+  it('normal text is untouched', () => {
+    expect(redact('Units consumed 123, amount Rs 7,371 due 24 NOV 26')).toBe('Units consumed 123, amount Rs 7,371 due 24 NOV 26');
+    expect(redact('Name of medicine: Panadol')).toContain('Panadol');
+  });
+});
+
 // Regression tests from the 16 Nov 2026 ten-tester audit: every leak they found must stay fixed.
 import { describe, it, expect } from 'vitest';
 import { buildCloudPayload, sanitizeExtraction, billNote } from './ai/router';
