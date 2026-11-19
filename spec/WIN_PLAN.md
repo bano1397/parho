@@ -14,12 +14,12 @@ Prizes: Grand ($10k), runners-up ($7k and $4k), Best Web/Chrome ($3k).
 | App Check and Firebase AI Logic | In the code |
 | PWA (sw.js and manifest) | Present |
 | Real-bill accuracy | 86–95% of key facts, 0 private leaks |
-| Browser tests (Playwright) | 3 passed, **2 failed** (the OCR fallback can't load its worker from the CDN) |
+| Browser tests (Playwright) | 5/5 pass (19 Nov, after the OCR fix; CDNs blocked in the tests) |
 
 ## Still to do
 | # | Task | Who | When |
 |---|---|---|---|
-| 1 | **Fallback e2e tests FAILED (2 of 5):** the OCR worker loads from cdn.jsdelivr.net, which was slow (7.5 s) and failed. Fix: bundle the Tesseract worker, core and eng data with the app (served from our own Hosting), so the fallback and offline mode don't depend on any outside site. Re-run the e2e tests and redeploy. | Claude | 18–19 Nov |
+| 1 | ✅ DONE 19 Nov (commit 8e84453, deployed; live fallback reads the sample in 1.9 s). Was: **Fallback e2e tests FAILED (2 of 5):** the OCR worker loads from cdn.jsdelivr.net, which was slow (7.5 s) and failed. Fix: bundle the Tesseract worker, core and eng data with the app (served from our own Hosting), so the fallback and offline mode don't depend on any outside site. Re-run the e2e tests and redeploy. | Claude | 18–19 Nov |
 | 2 | Accuracy: bill_02 units (31 should be 1), and make the bill_03 amount more stable | Claude | 19–20 Nov |
 | 3 | Re-run the real-bill eval 3 times and record the range | Claude + Shehar Bano (Chrome with Nano) | 20 Nov |
 | 4 | Shehar Bano reads the Urdu and medicine wording and says "Urdu ok" | Shehar Bano | 19 Nov |
