@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "test": "vitest run",
     "e2e": "playwright test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predev": "node scripts/copy-ocr.mjs",
+    "prebuild": "node scripts/copy-ocr.mjs"
   },
   "dependencies": {
     "firebase": "^13.2.0",

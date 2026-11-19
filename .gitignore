@@ -32,3 +32,6 @@ dist-e2e/
 test-results/
 playwright-report/
 .firebase/
+
+# OCR worker/core copied from node_modules at build time
+public/tesseract/*.js

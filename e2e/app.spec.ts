@@ -15,6 +15,8 @@ const STRUCTURED = JSON.stringify({
 
 /** Fake engines: no Nano, real on-device OCR (from the app), and a fake cloud that records every prompt. */
 async function mockCloud(page: Page, sent: string[]) {
+  // OCR must be served from our own site: block every CDN so a dependency on one fails the test.
+  await page.route(/cdn\.jsdelivr\.net|unpkg\.com/, (r) => r.abort());
   await page.exposeFunction('__record', (p: string) => { sent.push(p); });
   await page.addInitScript((structured) => {
     const w = window as unknown as Record<string, unknown>;

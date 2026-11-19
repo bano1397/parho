@@ -10,7 +10,13 @@ export function onOcrProgress(fn: typeof listener) {
 }
 
 export async function ocr(blob: Blob): Promise<string> {
-  worker ??= createWorker('eng', 1, { logger: (m) => listener?.(m.status, m.progress ?? 0) });
+  worker ??= createWorker('eng', 1, {
+    // Served from our own Hosting: no CDN needed, and it works offline once cached.
+    workerPath: '/tesseract/worker.min.js',
+    corePath: '/tesseract',
+    langPath: '/tesseract',
+    workerBlobURL: false,
+    logger: (m) => listener?.(m.status, m.progress ?? 0) });
   const w = await worker;
   const { data } = await w.recognize(blob);
   return data.text;
