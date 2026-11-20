@@ -13,15 +13,15 @@ Prizes: Grand ($10k), runners-up ($7k and $4k), Best Web/Chrome ($3k).
 | GitHub repo bano1397/parho | Public, Apache-2.0, last CI run green |
 | App Check and Firebase AI Logic | In the code |
 | PWA (sw.js and manifest) | Present |
-| Real-bill accuracy | 86–95% of key facts, 0 private leaks |
+| Real-bill accuracy | 95% (21/22) on 20 Nov with Nano; 86–95% on 16 Nov; 0 private leaks |
 | Browser tests (Playwright) | 5/5 pass (19 Nov, after the OCR fix; CDNs blocked in the tests) |
 
 ## Still to do
 | # | Task | Who | When |
 |---|---|---|---|
 | 1 | ✅ DONE 19 Nov (commit 8e84453, deployed; live fallback reads the sample in 1.9 s). Was: **Fallback e2e tests FAILED (2 of 5):** the OCR worker loads from cdn.jsdelivr.net, which was slow (7.5 s) and failed. Fix: bundle the Tesseract worker, core and eng data with the app (served from our own Hosting), so the fallback and offline mode don't depend on any outside site. Re-run the e2e tests and redeploy. | Claude | 18–19 Nov |
-| 2 | Accuracy: bill_02 units (31 should be 1), and make the bill_03 amount more stable | Claude | 19–20 Nov |
-| 3 | Re-run the real-bill eval 3 times and record the range | Claude + Shehar Bano (Chrome with Nano) | 20 Nov |
+| 2 | ✅ DONE 20 Nov: misread fields (non-number amounts, copied dates, repeated month/units) now hidden on the device. Was: Accuracy: bill_02 units (31 should be 1), and make the bill_03 amount more stable | Claude | 19–20 Nov |
+| 3 | ✅ DONE 20 Nov (Nano, live site): 21/22 key facts (95%), 0 leaks, 6.8–27 s per paper; bill_02 units 31 = meter readings 12634−12603, answer key may be wrong — Shehar Bano to check. Was: Re-run the real-bill eval 3 times and record the range | Claude + Shehar Bano (Chrome with Nano) | 20 Nov |
 | 4 | Shehar Bano reads the Urdu and medicine wording and says "Urdu ok" | Shehar Bano | 19 Nov |
 | 5 | Set the repo website field to the live link; fix the description typos ("wit", "viacloud") | Shehar Bano clicks, Claude gives the text | 19 Nov |
 | 6 | Polish (judges score Design): add PNG app icons; empty and error states | Claude | 20–21 Nov |

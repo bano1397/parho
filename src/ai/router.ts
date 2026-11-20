@@ -96,7 +96,33 @@ export function sanitizeExtraction<T extends Extraction>(ex: T): T {
     // On a medicine box "name" is the medicine; elsewhere it is a person.
     return !/name|naam/i.test(f.label);
   });
-  return { ...ex, fields: ex.doc_type === 'bill' ? checkUnits(fields) : fields };
+  return { ...ex, fields: ex.doc_type === 'bill' ? checkUnits(dropImplausible(fields)) : fields };
+}
+
+const MONEY_OR_COUNT_LABEL = /amount|charges?|current\s*bill|total|units?|consumption|reading(?!\s*date)|arrears?|\btax|duty|gst|\bfee/i;
+const DATE_LABEL = /date|month|period/i;
+const NUMBER_ONLY = /^\s*(rs\.?|pkr)?\s*-?[\d,]+(\.\d+)?\s*(\/-|units?|kwh)?\s*$/i;
+const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Runs on the device: hides bill fields that are clearly misread, so a wrong value is never shown or explained.
+ *  - an amount, charge or units field whose value is not a plain number ("After 27/NOV-26")
+ *  - a date other than the due date that copies the due date (the model reused it)
+ *  - the same month or units value repeated under a second label */
+export function dropImplausible<F extends { label: string; value: string }>(fields: F[]): F[] {
+  const due = fields.find((f) => /due\s*date/i.test(f.label) && !/after|before/i.test(f.label));
+  const seen = new Set<string>();
+  return fields.filter((f) => {
+    const isMoney = MONEY_OR_COUNT_LABEL.test(f.label) && !/prev\w*\s*months?|last|history/i.test(f.label);
+    if (isMoney && !(DATE_LABEL.test(f.label) && !/amount|charges?|units?|total/i.test(f.label)) && !NUMBER_ONLY.test(f.value)) return false;
+    if (due && f !== due && /date/i.test(f.label) && !/due/i.test(f.label) && norm(f.value) === norm(due.value)) return false;
+    const kind = /month|period/i.test(f.label) ? 'month' : /^\s*(units?|consumption)\b/i.test(f.label) ? 'units' : '';
+    if (kind) {
+      const key = `${kind}:${norm(f.value)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+    }
+    return true;
+  });
 }
 
 const toNum = (v?: string) => {

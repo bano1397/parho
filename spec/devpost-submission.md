@@ -33,7 +33,7 @@ Tested on **8 real documents** (6 FESCO electricity bills from Faisalabad + 2 me
 - **0 private details** (names, addresses, consumer/reference numbers) reached the cloud.
 - **0 invented doses.** Testing showed Nano writes doses that are not printed on small boxes, so Parho now keeps only the medicine's name, ingredient and strength and sends the person to a pharmacist.
 - Units are cross-checked on the device: (present reading − previous reading) × MF.
-- A 10-agent audit tried to break privacy and medicine safety; A second 7-tester audit (19 Nov) found 10 more privacy edge cases (LESCO-style reference numbers, unlabelled names, "pata" addresses, IBANs); all are fixed. Every leak found is now a permanent test: 99 unit tests and 5 browser tests (Playwright + axe).
+- A 10-agent audit tried to break privacy and medicine safety; A second 7-tester audit (19 Nov) found 10 more privacy edge cases (LESCO-style reference numbers, unlabelled names, "pata" addresses, IBANs); all are fixed. Every leak found is now a permanent test: 105 unit tests and 5 browser tests (Playwright + axe).
 - Reading takes about **10–17 s on the device**; the cloud receives about **0.7 KB of text** instead of a ~600 KB photo.
 
 ## What's next
