@@ -184,9 +184,15 @@ export default function App() {
       <header>
         <div>
           <h1>Parho <span lang="ur" dir="rtl" className="urdu" style={{ fontSize: '0.8em' }}>پڑھو</span></h1>
-          <p className="sub">Photograph a bill, notice or medicine box. Parho reads it <b>on this device</b> and explains it in simple Urdu.</p>
+          <p className="sub">Photograph a bill, notice or medicine box. Parho reads it <b>on this device</b> and explains it in simple {lang === 'en' ? 'English' : 'Urdu'}.</p>
         </div>
-        <StatusChip nano={nano} online={online} />
+        <div className="row" style={{ alignItems: 'center' }}>
+          <div className="langswitch" role="group" aria-label="Explanation language">
+            <button aria-pressed={lang === 'en'} className={lang === 'en' ? 'on' : ''} onClick={() => { setLang('en'); setAnswer(''); stopSpeaking(); }}>English</button>
+            <button aria-pressed={lang !== 'en'} className={lang !== 'en' ? 'on' : ''} lang="ur" onClick={() => { setLang('ur'); setAnswer(''); stopSpeaking(); }}>اردو</button>
+          </div>
+          <StatusChip nano={nano} online={online} />
+        </div>
       </header>
 
       {nano === 'downloadable' && (
