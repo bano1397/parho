@@ -34,23 +34,29 @@ The step that sees the photo is the private one, so it runs on the device. The s
 - Cloud "high demand" errors are retried automatically.
 
 ## Accomplishments / Numbers
-Tested on **8 real documents** (6 FESCO electricity bills from Faisalabad + 2 medicine boxes), read by Gemini Nano on a MacBook, 16 Nov 2026:
+Web app tested on **8 real documents** (6 FESCO electricity bills from Faisalabad + 2 medicine boxes), read by Gemini Nano on a MacBook, 16 Nov 2026:
 - Across repeated runs: **due date 6/6 every time**, amount to pay 5–6/6, units used 4–5/6, medicine name + ingredient 4/4. Overall **86–95% of key facts** (19–21 of 22). Nano's answers vary a little between runs, so Parho always shows what it read.
 - **0 private details** (names, addresses, consumer/reference numbers) reached the cloud.
 - **0 invented doses.** Testing showed Nano writes doses that are not printed on small boxes, so Parho now keeps only the medicine's name, ingredient and strength and sends the person to a pharmacist.
 - Misread bill fields are hidden on the device (a non-number amount, a copied date, a repeated month). Units printed on the bill win; units are only worked out from (present − previous reading) × MF when none were read.
 - Re-test on the live site, 20 Nov 2026: **21 of 22 key facts (95%)**, 0 leaks.
-- A 10-agent audit tried to break privacy and medicine safety. A second 7-tester audit (19 Nov) found 10 more privacy edge cases (LESCO-style reference numbers, unlabelled names, "pata" addresses, IBANs); all are fixed. Every leak found is now a permanent test: 106 unit tests and 5 browser tests (Playwright + axe).
+- A 10-agent audit tried to break privacy and medicine safety. A second 7-tester audit (19 Nov) found 10 more privacy edge cases (LESCO-style reference numbers, unlabelled names, "pata" addresses, IBANs); all are fixed. Every leak found is now a permanent test: 119 web unit tests, 5 browser tests (Playwright + axe), and the same privacy cases ported to the iPhone (XCTest) and Android (JUnit) apps.
 - Reading takes about **10–17 s on the device**; the cloud receives about **0.7 KB of text** instead of a ~600 KB photo.
 
 ## What's next
 Publishing the iPhone and Android apps to the stores, more Pakistani languages (Sindhi, Pashto, Punjabi), and help with tax and school notices.
 
 ## Built before vs during the submission period
-The spec, scaffold and first working version were made on 11 Nov 2026 (first commit). Everything after commit `de09f38` was built during the period: deploy, App Check, notice improvements, OCR-fallback privacy fix, retries, PWA, CI, progress UI and the evaluation kit.
+The spec, scaffold and first working version were made on 11 Nov 2026 (first commit). Everything after commit `de09f38` was built during the period: deploy, App Check, notice improvements, OCR-fallback privacy fix, retries, PWA, CI, progress UI, the English / Urdu switch, the evaluation kit, and the native iPhone and Android apps (24–25 Nov).
 
 ## AI disclosure
 Built by Shehar Bano with help from Claude Code, an AI coding assistant.
 
+## Platforms (Devpost form)
+Select **Web (Chrome), Android and iOS**.
+
 ## Testing instructions for judges
+**iPhone / Android:** the native apps are in `ios/` and `android/` in the repo, with build steps in the README (Xcode simulator; Android Studio emulator). They need your own Firebase config files (not committed). The demo video shows both running.
+
+**Web:**
 Open https://firstapp-13a9a.web.app in desktop Chrome 139+. For on-device reading, enable `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` and click **Download Gemini Nano**. Then click a sample (fake data). Without Nano, the OCR fallback runs automatically.

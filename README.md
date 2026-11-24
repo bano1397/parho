@@ -1,6 +1,6 @@
 # Parho (پڑھو)
 
-**Photograph a bill, notice or medicine box. Parho reads it on your device with Gemini Nano, removes your private details, and explains it in simple Urdu.**
+**Photograph a bill, notice or medicine box. Parho reads it on your device, removes your private details, and explains it in simple Urdu (or English). Runs on the web (Chrome), iPhone and Android.**
 
 Millions of people in Pakistan receive electricity bills, disconnection notices and medicine leaflets they can't easily read. The usual fix is to ask someone else, which means showing them your CNIC, address and account number. Parho keeps the paper private and still gives a clear answer in Urdu, read aloud.
 
@@ -12,6 +12,16 @@ Millions of people in Pakistan receive electricity bills, disconnection notices 
 | Remove private details | **On-device**: Redactor + Safety Net (plain code) | Names, CNIC, phone, email, address and account numbers are replaced with labels |
 | Explain in Urdu | **Cloud**: Gemini via Firebase AI Logic (`InferenceMode.ONLY_IN_CLOUD`) | Gemini Nano doesn't write Urdu, so this step needs the cloud model. It receives redacted text only |
 | Fallback when Nano isn't available | On-device OCR (tesseract.js) → redact → **cloud** organises the text | The app still works on any browser. The user sees exactly what will be sent and must press **Send** |
+
+### On each platform
+
+| Platform | Reads the paper on the device | Organises it on the device | Explains |
+|---|---|---|---|
+| Web (desktop Chrome) | Gemini Nano (image input) | Gemini Nano | Gemini (cloud) |
+| iPhone (`ios/`, SwiftUI) | Apple Vision OCR | Apple's on-device Foundation Model | Gemini via Firebase AI Logic |
+| Android (`android/`, Compose) | ML Kit text recognition | Gemini Nano via Firebase AI Logic (`ONLY_ON_DEVICE`) where supported | Gemini via Firebase AI Logic |
+
+Where no on-device model is available, every platform redacts the text on the device first and asks before sending it. The privacy rules are ported line by line to Swift and Kotlin, with their own tests.
 
 The **"How Parho handled this"** timeline shows, for every document, which engine ran each step, how long it took, and how many bytes were sent.
 
@@ -39,16 +49,42 @@ Requirements: Node 20+, and desktop Chrome 139+ for on-device AI. For image inpu
 npm install
 cp .env.example .env.local   # fill in your Firebase web config + App Check keys
 npm run dev
-npm test        # 105 unit, property-based and audit-regression tests
+npm test        # 119 unit, property-based and audit-regression tests
 npm run e2e     # 5 browser tests (Playwright + axe) on a test build with a fake cloud
 ```
 
 
-**Real-world test (16 Nov 2026):** 6 real FESCO electricity bills and 2 medicine boxes, read by Gemini Nano on a MacBook. Across repeated runs, 19 to 21 of 22 key facts were correct (86–95%): due date 6/6 every run, amount 5–6/6, units 4–5/6, medicine name and ingredient 4/4. Nano's answers vary a little between runs, so the app always shows the reading for the person to check. No private detail (name, address, consumer or reference number) reached the cloud, and no dose was shown for any medicine. The real bills are kept private and are not in this repo.
+**Real-world test (16 Nov 2026, web app with Gemini Nano):** 6 real FESCO electricity bills and 2 medicine boxes, read by Gemini Nano on a MacBook. Across repeated runs, 19 to 21 of 22 key facts were correct (86–95%): due date 6/6 every run, amount 5–6/6, units 4–5/6, medicine name and ingredient 4/4. Nano's answers vary a little between runs, so the app always shows the reading for the person to check. No private detail (name, address, consumer or reference number) reached the cloud, and no dose was shown for any medicine. The real bills are kept private and are not in this repo.
+
+### iPhone app (`ios/`)
+
+Requirements: Xcode 27+, iOS 27 simulator or device (Apple Intelligence for the on-device model).
+
+```bash
+cd ios
+xcodegen                     # generates Parho.xcodeproj from project.yml
+# add your GoogleService-Info.plist to ios/Parho/ (not in the repo):
+#   firebase apps:sdkconfig IOS <your-ios-app-id> > Parho/GoogleService-Info.plist
+xcodebuild test -project Parho.xcodeproj -scheme Parho -destination 'platform=iOS Simulator,name=iPhone 17'
+```
+Debug builds use the App Check debug provider: register the token printed in the Xcode console ("App Check debug token") with `firebase appcheck:debugtokens:create`.
+
+### Android app (`android/`)
+
+Requirements: JDK 21, Android SDK 36.
+
+```bash
+cd android
+# add your google-services.json to android/app/ (not in the repo):
+#   firebase apps:sdkconfig ANDROID <your-android-app-id> > app/google-services.json
+./gradlew testDebugUnitTest assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+Debug builds use the App Check debug provider: register the token from logcat (tag `DebugAppCheckProvider`) with `firebase appcheck:debugtokens:create`.
 
 Firebase setup:
 1. Create a Firebase project and enable **AI Logic** with the **Gemini Developer API**.
-2. Register a web app.
+2. Register a web app, an iOS app and an Android app (bundle / package id `app.parho.reader`).
 3. Register the app in **App Check** with Fraud Defense (reCAPTCHA Enterprise).
 4. For local development, add your `VITE_APPCHECK_DEBUG_TOKEN` under App Check → Manage debug tokens.
 
@@ -58,24 +94,26 @@ Firebase setup:
 - `src/ai/router.ts`: decides where each step runs, builds the cloud payload, and writes the timeline.
 - `src/privacy/`: Safety Net and Redactor.
 - `src/ai/prompts.ts`: extraction and explanation prompts.
+- `ios/Parho/`: Swift port (Privacy.swift, Extraction.swift, Prompts.swift, Engines.swift, Pipeline.swift, Views.swift); tests in `ios/ParhoTests/`.
+- `android/app/src/main/java/app/parho/reader/`: Kotlin port (Privacy.kt, Core.kt, Prompts.kt, Ai.kt, Pipeline.kt, MainActivity.kt); tests in `android/app/src/test/`.
 
 ## Limits
 
-- On-device AI needs desktop Chrome; other browsers use the OCR fallback.
+- On the web, on-device AI needs desktop Chrome; other browsers use the OCR fallback. On Android, Gemini Nano runs only on supported phones; others use the redacted-cloud fallback.
 - Urdu read-aloud depends on an Urdu voice being installed. Roman Urdu and English work everywhere.
 - Parho explains what is printed. It is **not** medical, legal or financial advice.
 - The sample documents contain fake data only.
 
 ## Built with
 
-Firebase AI Logic (hybrid inference), Gemini Nano, Gemini, Firebase App Check, React, TypeScript, Vite, tesseract.js, Vitest, fast-check.
+Firebase AI Logic (hybrid inference), Gemini Nano, Gemini, Firebase App Check, React, TypeScript, Vite, tesseract.js, Vitest, fast-check; SwiftUI, Apple Vision, Apple Foundation Models, XCTest; Kotlin, Jetpack Compose, ML Kit, JUnit.
 
 AI disclosure: built by Shehar Bano with help from Claude Code, an AI coding assistant.
 
 ## What was built when
 
 - **Before the submission period (11 Nov 2026, evening PKT):** project spec, initial scaffold, first version of on-device reading, redaction and Urdu explanation (first commit).
-- **During the submission period (from 12 Nov 2026):** Firebase Hosting deploy, App Check with Fraud Defense, improved notice fields, offline app shell (PWA), CI, and everything after commit `de09f38`. See the git history for details.
+- **During the submission period (from 12 Nov 2026):** Firebase Hosting deploy, App Check with Fraud Defense, improved notice fields, offline app shell (PWA), CI, the native iPhone and Android apps (24–25 Nov), and everything after commit `de09f38`. See the git history for details.
 
 ## License
 
