@@ -132,7 +132,7 @@ const toNum = (v?: string) => {
 };
 const UNITS_LABEL = /^\s*(current\s*|billed\s*|net\s*|total\s*)?units?\s*(consumed|used|billed)?\s*(\(.*\))?\s*$/i;
 
-/** On a bill, units used = (present − previous reading) × MF. If the model's "units" disagrees, trust the arithmetic.
+/** On a bill, units used = (present − previous reading) × MF. Used only when no units were read: the printed units win (a real bill showed 1 unit while its readings were 31 apart).
  *  Skips anything it cannot be sure about: gas units, decimals, unreadable multipliers. */
 function checkUnits<F extends { label: string; value: string }>(fields: F[]): F[] {
   const all = fields.map((f) => `${f.label} ${f.value}`).join(' ');
@@ -146,7 +146,7 @@ function checkUnits<F extends { label: string; value: string }>(fields: F[]): F[
   const diff = (toNum(cur.value) - toNum(prev.value)) * mf;
   if (!(diff > 0 && diff < 100000)) return fields;
   const i = fields.findIndex((f) => UNITS_LABEL.test(f.label));
-  if (i >= 0 && (/\./.test(fields[i].value) || toNum(fields[i].value) === diff)) return fields;
+  if (i >= 0) return fields; // the units printed on the bill win; only fill units when none were read
   const fixed = { ...(i >= 0 ? fields[i] : prev), label: 'Units', value: String(diff) } as F;
   return i >= 0 ? fields.map((f, k) => (k === i ? fixed : f)) : [...fields, fixed];
 }

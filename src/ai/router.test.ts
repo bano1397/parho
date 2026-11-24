@@ -125,8 +125,11 @@ describe('sanitizeExtraction', () => {
 
 describe('units check', () => {
   const b = (fields: { label: string; value: string }[]) => (_san({ title: 'x', private_values: [], text: '', doc_type: 'bill', fields } as never) as { fields: { label: string; value: string }[] }).fields;
-  it('replaces wrong units with present minus previous reading', () => {
-    expect(b([{ label: 'UNITS', value: '151' }, { label: 'PREVIOUS READING', value: '81940' }, { label: 'CURRENT READING', value: '82024' }])[0]).toEqual({ label: 'Units', value: '84' });
+  it('keeps the units printed on the bill even when the readings disagree (real bill: 1 unit, readings 31 apart)', () => {
+    expect(b([{ label: 'UNITS', value: '1' }, { label: 'PREVIOUS READING', value: '12603' }, { label: 'CURRENT READING', value: '12634' }])[0]).toEqual({ label: 'UNITS', value: '1' });
+  });
+  it('fills units from present minus previous reading when none were read', () => {
+    expect(b([{ label: 'PREVIOUS READING', value: '81940' }, { label: 'CURRENT READING', value: '82024' }]).find((f) => f.label === 'Units')?.value).toBe('84');
   });
   it('leaves units alone when readings are unusable', () => {
     expect(b([{ label: 'Units', value: '31' }, { label: 'Previous Reading', value: '12630' }, { label: 'Current Reading', value: '12630' }])[0].value).toBe('31');
