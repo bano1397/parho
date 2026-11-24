@@ -56,12 +56,12 @@ fun parseExtraction(raw: String, source: Source = Source.NANO): Extraction {
 }
 
 private const val I = Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
-private fun rx(src: String, flags: Int = I): Regex = Pattern.compile(src, flags).toRegex()
+private fun rx(src: String, flags: Int = I): Regex = Pattern.compile(jsAscii(src), flags).toRegex()
 
 private val PRIVATE_LABEL = rx("private|address|cnic|consumer|reference|ref\\.?\\s*(no|#)|account|acc\\.?\\s*(no|#)|meter\\s*(no|#|number)|phone|mobile|email|customer|cust\\.?\\s*(no|#|id)?\\b|recipient|holder|addressee|applicant|student|patient|father|husband|s/o|d/o|w/o|bill\\s*of|\\bid\\b|pata|walid|wald|sender|^\\s*(to|from)\\s*$|account\\s*title|iban")
 private val MED_SAFE_LABEL = rx("^\\s*(brand\\s*)?(name|brand|title|product|drug|active[\\s_]*ingredients?|ingredients?|generic(\\s*name)?|composition|contains|strength|form|(medicine|drug|product|dawai|dawa)\\s*(ka\\s*)?(name|naam)?)\\s*$")
 private val MED_RISKY_LABEL = rx("dos|per\\s*day|maximum|max|warning|caution|expir|exp\\.?\\s*date|direction|how\\s*to|frequency|every|usage|use|indicat|for\\b")
-private val MED_RISKY_VALUE = rx("\\d\\s*\\+\\s*\\d|\\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\\b|\\bx\\s*\\d|\\d\\s*x\\b|times|daily|hours?|hrs?|days?|weeks?|/\\s*kg|exceed|before|until|\\d{1,2}\\s*[/-]\\s*\\d{2,4}|child|adult|pregnan|take|tablets?\\s+every|every|baar|roz|din\\b|گولی|روزانہ|بار|دن|خوراک|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات")
+private val MED_RISKY_VALUE = rx("\\d\\s*\\+\\s*\\d|\\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\\b|\\bx\\s*\\d|\\d\\s*x\\b|times|daily|hours?|hrs?|days?|weeks?|/\\s*kg|exceed|before|until|\\d{1,2}\\s*[/-]\\s*\\d{2,4}|child|adult|pregnan|take|tablets?\\s+every|every|baar|roz|din\\b|گولی|روزانہ|بار|دن|خوراک|max|maximum|up\\s*to|limit|per\\s*day|/\\s*day|a\\s*day|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات")
 private val STRENGTH_RE = rx("^\\s*\\d+(\\.\\d+)?\\s*(mg|mcg|µg|g|ml|%|iu)(\\s*/\\s*\\d*\\s*(ml|g|tab(let)?))?\\s*$")
 private val FORM_RE = rx("^\\s*(tablets?|capsules?|syrup|suspension|drops?|cream|ointment|gel|injection|sachets?|inhaler|spray)\\s*$")
 private val STRENGTH_ANY = rx("\\d+(\\.\\d+)?\\s*(mg|mcg|µg|g|ml|%|iu)\\b")
@@ -72,6 +72,8 @@ private fun medicineFieldOk(f: Field): Boolean {
     if (rx("strength").containsMatchIn(f.label)) return STRENGTH_RE.containsMatchIn(f.value)
     if (rx("^\\s*form\\s*$").containsMatchIn(f.label)) return FORM_RE.containsMatchIn(f.value)
     if (MED_RISKY_VALUE.containsMatchIn(f.value)) return false
+    // At most one strength per value: a second one is usually a daily maximum ("500 mg, 4 g").
+    if (STRENGTH_ANY.findAll(f.value).count() > 1) return false
     return !Regex("\\d").containsMatchIn(STRENGTH_ANY.replace(f.value, ""))
 }
 
@@ -175,6 +177,19 @@ fun buildCloudPayload(ex: Extraction, language: Lang): CloudPayload {
 
 const val BILL_JUMP_RATIO = 0.5
 
+private val MONTH_TOKEN = rx("\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\b")
+private val NUM_DATE = rx("\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b")
+private val THOUSANDS = rx("(\\d),(?=\\d{3}(?!\\d))")
+private val MONTH_YEAR = rx("[a-z]{3,9}\\.?\\s*[-'’]?\\s*(?:(?:19|20)\\d{2}|\\d{2})(?!\\d)")
+
+/** Units numbers from a history value: drops dates, month-year tokens ("NOV-25", "NOV 25", "Nov 2025") and thousands commas. */
+fun historyNumbers(value: String): List<Int> {
+    var v = NUM_DATE.replace(value, " ")
+    v = THOUSANDS.replace(v, "$1")
+    v = MONTH_YEAR.replace(v, " ")
+    return Regex("\\d{1,5}").findAll(v).map { it.value.toInt() }.filter { it in 1..4999 && it !in 1990..2100 }.toList()
+}
+
 /** Computed on the device: does this bill jump sharply compared to earlier months? */
 fun billNote(ex: Extraction): String? {
     if (ex.docType != "bill") return null
@@ -184,12 +199,15 @@ fun billNote(ex: Extraction): String? {
     val units = fields.firstOrNull { UNITS_LABEL.containsMatchIn(it.label) && !rx("prev|last|history").containsMatchIn(it.label) } ?: return null
     val hist = fields.filter { rx("prev|last|history").containsMatchIn(it.label) && !rx("reading").containsMatchIn(it.label) }
     val history = if (hist.any { rx("history").containsMatchIn(it.label) }) hist.filter { rx("history").containsMatchIn(it.label) } else hist
-    val monthYear = rx("[a-z]{3,9}(?:[-'’]?\\d{2}|\\.?\\s*[-'’]?\\s*(?:19|20)\\d{2})(?!\\d)")
-    // If the reader left the printed history line out of its fields, read it from the (redacted) text.
-    val histLine = Regex("(?im)^.*\\bhistory\\b[^:\\n]*:(.*)$").find(ex.text)?.groupValues?.get(1)
-    val source = if (hist.any { rx("history").containsMatchIn(it.label) } || histLine == null) history else listOf(Field("History", histLine))
-    val past = source.flatMap { f -> Regex("\\d{1,5}").findAll(monthYear.replace(f.value, " ")).map { it.value.toInt() }.toList() }
-        .filter { it in 1..4999 && !(it in 1990..2100) }
+    // If the reader left the printed history line out of its fields, read it from the (redacted) text,
+    // but only a line that looks like a units history (not "Payment History: 12-10-2026 Rs 5,000").
+    val histMatch = rx("^.*\\bhistory\\b[^:\\n]*:(.*)$", I or Pattern.MULTILINE).find(ex.text)
+    val lineOk = histMatch != null && !rx("\\b(rs|pkr|paid|payment)\\b|rs\\.|\\[").containsMatchIn(histMatch.value) &&
+        (rx("units?|kwh|consumption").containsMatchIn(histMatch.value) || MONTH_TOKEN.findAll(histMatch.groupValues[1]).count() >= 3)
+    val fromText = !hist.any { rx("history").containsMatchIn(it.label) } && lineOk
+    val source = if (fromText) listOf(Field("History", histMatch!!.groupValues[1])) else history
+    val past = source.flatMap { historyNumbers(it.value) }
+    if (fromText && past.size < 3) return null
     if (past.isEmpty()) return null
     val cur = toNum(units.value)
     val avg = past.average()
@@ -208,5 +226,6 @@ private fun fmt(d: Double) = if (d == Math.floor(d)) d.toLong().toString() else 
 fun finishExplanation(text: String, payload: CloudPayload): String {
     val t = text.trim()
     if (payload.docType != "medicine") return t
-    return if (Regex("pharmacist|فارماسسٹ", RegexOption.IGNORE_CASE).containsMatchIn(t)) t else "$t\n${Prompts.medEnd(payload.language)}"
+    val end = Prompts.medEnd(payload.language)
+    return if (t.contains(end)) t else "$t\n$end"
 }

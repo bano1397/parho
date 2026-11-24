@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,6 +111,27 @@ private suspend fun ocr(bmp: Bitmap): String = suspendCancellableCoroutine { c -
         .addOnFailureListener { c.resumeWithException(it) }
 }
 
+/** Decodes a photo at about 1600 px (never full size, so 50–108 MP photos can't run out of memory) and turns it upright using EXIF. */
+private fun loadUpright(cr: android.content.ContentResolver, uri: Uri): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1600) sample *= 2
+    val bmp = cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
+    val deg = try {
+        cr.openInputStream(uri)?.use {
+            when (android.media.ExifInterface(it).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+        } ?: 0f
+    } catch (_: Exception) { 0f }
+    if (deg == 0f) return bmp
+    return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, android.graphics.Matrix().apply { postRotate(deg) }, true)
+}
+
 private fun scaled(b: Bitmap): Bitmap {
     val m = maxOf(b.width, b.height)
     if (m <= 1600) return b
@@ -134,9 +156,9 @@ private fun friendly(e: Throwable): String = when (e) {
 fun ParhoScreen(speak: (String, Lang) -> Boolean) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var lang by remember { mutableStateOf(Lang.UR) }
-    var large by remember { mutableStateOf(false) }
-    var contrast by remember { mutableStateOf(false) }
+    var lang by rememberSaveable { mutableStateOf(Lang.UR) }
+    var large by rememberSaveable { mutableStateOf(false) }
+    var contrast by rememberSaveable { mutableStateOf(false) }
     var nano by remember { mutableStateOf("checking") }
     var busy by remember { mutableStateOf<String?>(null) }
     var photo by remember { mutableStateOf<Bitmap?>(null) }
@@ -150,7 +172,15 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
     val pipeline = remember { Pipeline(RealEngines, { e -> timeline.add(e) }) }
     val t = UI.getValue(lang)
 
-    LaunchedEffect(Unit) { nano = if (RealEngines.nanoStatus() == NanoStatus.AVAILABLE) "ready" else "unavailable" }
+    LaunchedEffect(Unit) {
+        // Re-check while Gemini Nano downloads on supported phones.
+        while (true) {
+            val s = RealEngines.nanoStatus()
+            nano = when (s) { NanoStatus.AVAILABLE -> "ready"; NanoStatus.DOWNLOADING -> "downloading"; else -> "unavailable" }
+            if (s != NanoStatus.DOWNLOADING) break
+            kotlinx.coroutines.delay(15_000)
+        }
+    }
 
     fun rebuild(l: Lang) {
         val e = ex ?: return
@@ -158,6 +188,8 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
     }
 
     fun run(bmp: Bitmap) {
+        // A new paper replaces any read still waiting for "send redacted text?": answer it "no" so that coroutine ends.
+        confirm?.complete(false); confirm = null; confirmText = null
         photo = bmp; ex = null; payload = null; answer = ""; error = null; timeline.clear()
         scope.launch {
             try {
@@ -183,7 +215,9 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
         val f = File(ctx.cacheDir, "photos").apply { mkdirs() }.let { File(it, "camera.jpg") }
         FileProvider.getUriForFile(ctx, "app.parho.reader.files", f)
     }
-    fun load(uri: Uri) = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+    fun load(uri: Uri): Bitmap? = try { loadUpright(ctx.contentResolver, uri) } catch (e: Throwable) {
+        error = "Could not open this photo. Try another one. (${e.javaClass.simpleName})"; null
+    }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) load(camUri)?.let(::run) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { u -> load(u)?.let(::run) } }
 
@@ -207,20 +241,20 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
                             color = if (on) MaterialTheme.colorScheme.onPrimary else fg, fontWeight = FontWeight.SemiBold, fontSize = 15.sp * scale)
                     }
                 }
-                Chip(if (nano == "ready") "🔒 On-device AI ready" else if (nano == "checking") "Checking on-device AI…" else "🔒 Reads on this phone (OCR)")
+                Chip(when (nano) { "ready" -> "🔒 On-device AI ready"; "checking" -> "Checking on-device AI…"; "downloading" -> "⬇️ Downloading Gemini Nano…"; else -> "🔒 Reads on this phone (OCR)" })
             }
 
             Card("1. Your paper") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { camera.launch(camUri) }, enabled = busy == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("📷 ${t[0]}", fontSize = 16.sp * scale) }
-                    OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = busy == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("🖼 ${t[1]}", fontSize = 16.sp * scale) }
+                    Button(onClick = { camera.launch(camUri) }, enabled = busy == null && confirm == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("📷 ${t[0]}", fontSize = 16.sp * scale) }
+                    OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = busy == null && confirm == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("🖼 ${t[1]}", fontSize = 16.sp * scale) }
                 }
                 Text("Or try a sample (fake data):", fontSize = 14.sp * scale)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SAMPLES.forEach { s ->
                         val bmp = remember(s.file) { ctx.assets.open("samples/${s.file}").use { BitmapFactory.decodeStream(it) } }
                         Column(Modifier.weight(1f).border(1.dp, Color.Gray.copy(alpha = .4f), RoundedCornerShape(12.dp))
-                            .clickable(enabled = busy == null) { run(bmp) }.padding(6.dp).semantics { contentDescription = s.label }) {
+                            .clickable(enabled = busy == null && confirm == null) { run(bmp) }.padding(6.dp).semantics { contentDescription = s.label }) {
                             Image(bmp.asImageBitmap(), s.label, Modifier.fillMaxWidth().height(70.dp), contentScale = ContentScale.Crop, alignment = Alignment.TopCenter)
                             Text(s.label, fontSize = 12.sp * scale, fontWeight = FontWeight.SemiBold)
                             Text(s.ur, fontSize = 12.sp * scale)
@@ -274,7 +308,7 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
                             busy = "Cloud Gemini is writing the explanation…"
                             try { answer = pipeline.explain(p, e) } catch (x: Throwable) { error = friendly(x) } finally { busy = null }
                         }
-                    }, enabled = busy == null, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("explain")) { Text("☁️ ${t[2]}", fontSize = 16.sp * scale) }
+                    }, enabled = busy == null && confirm == null, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("explain")) { Text("☁️ ${t[2]}", fontSize = 16.sp * scale) }
                 }
             }
 

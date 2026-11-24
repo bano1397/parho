@@ -10,7 +10,11 @@ import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.PublicPreviewAPI
 import com.google.firebase.ai.type.generationConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 /** The ONLY file that touches Firebase AI Logic. */
@@ -44,9 +48,28 @@ object RealEngines : Engines {
     override suspend fun nanoStatus(): NanoStatus = try {
         val s = withTimeout(5_000) { nanoModel.onDeviceExtension?.checkStatus() }
         lastStatus = s?.toString() ?: "UNAVAILABLE"
-        if (s == OnDeviceModelStatus.AVAILABLE) NanoStatus.AVAILABLE else NanoStatus.UNAVAILABLE
+        when (s) {
+            OnDeviceModelStatus.AVAILABLE -> NanoStatus.AVAILABLE
+            OnDeviceModelStatus.DOWNLOADABLE -> { startDownload(); NanoStatus.DOWNLOADING }
+            OnDeviceModelStatus.DOWNLOADING -> NanoStatus.DOWNLOADING
+            else -> NanoStatus.UNAVAILABLE
+        }
     } catch (e: Throwable) {
         Log.i("Parho", "Gemini Nano not available: $e"); lastStatus = "UNAVAILABLE"; NanoStatus.UNAVAILABLE
+    }
+
+    private val bg = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var downloading = false
+
+    /** Supported phones (Pixel, Galaxy…) download Gemini Nano once; until then Parho uses the redacted cloud fallback. */
+    private fun startDownload() {
+        if (downloading) return
+        downloading = true
+        bg.launch {
+            try { nanoModel.onDeviceExtension?.download()?.collect { Log.i("Parho", "Gemini Nano download: $it") } }
+            catch (e: Throwable) { Log.i("Parho", "Gemini Nano download failed: $e") }
+            finally { downloading = false }
+        }
     }
 
     override suspend fun nano(prompt: String): String =

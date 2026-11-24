@@ -16,6 +16,12 @@ Many people in Pakistan can't comfortably read the English printed on their elec
 - **Fallback:** without Nano, it uses on-device OCR, then redaction, then asks the user before sending the text.
 - A timeline shows which engine ran each step, how long it took, and how many bytes were sent.
 
+## On every platform
+- **Web (desktop Chrome):** Gemini Nano reads the photo on the device (Firebase AI Logic, `ONLY_ON_DEVICE`).
+- **iPhone (native SwiftUI):** Apple Vision reads the text on the phone, Apple's on-device Foundation Model organises it, and the same redaction + Safety Net run on the phone before Gemini (Firebase AI Logic) explains it.
+- **Android (native Jetpack Compose):** ML Kit reads the text on the phone; Gemini Nano organises it on devices that support it (Firebase AI Logic on-device, `ONLY_ON_DEVICE`), otherwise the text is redacted on the phone and the user is asked before it goes to the cloud.
+- The privacy rules are ported line by line to Swift and Kotlin, with their own tests.
+
 ## How we built it
 React + TypeScript + Vite, Firebase AI Logic (hybrid inference), Firebase App Check (reCAPTCHA Enterprise), Firebase Hosting, tesseract.js, zod, Vitest + fast-check. The app shell loads offline (PWA) and Nano reads without internet; the Urdu explanation needs a connection.
 
@@ -38,7 +44,7 @@ Tested on **8 real documents** (6 FESCO electricity bills from Faisalabad + 2 me
 - Reading takes about **10–17 s on the device**; the cloud receives about **0.7 KB of text** instead of a ~600 KB photo.
 
 ## What's next
-An Android version with on-device Gemini Nano, more Pakistani languages (Sindhi, Pashto, Punjabi), and help with tax and school notices.
+Publishing the iPhone and Android apps to the stores, more Pakistani languages (Sindhi, Pashto, Punjabi), and help with tax and school notices.
 
 ## Built before vs during the submission period
 The spec, scaffold and first working version were made on 11 Nov 2026 (first commit). Everything after commit `de09f38` was built during the period: deploy, App Check, notice improvements, OCR-fallback privacy fix, retries, PWA, CI, progress UI and the evaluation kit.

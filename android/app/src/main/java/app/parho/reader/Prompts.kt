@@ -59,7 +59,7 @@ End with: "Ask a doctor or pharmacist how much to take and when." At most 3 shor
         val data = JSONObject().apply {
             put("doc_type", p.docType)
             if (p.title != null) put("title", p.title)
-            put("fields", JSONArray(p.fields.map { JSONObject().put("label", it.label).put("value", it.value) }))
+            put("fields", JSONArray(p.fields.map { JSONObject().put("label", it.label).put("value", it.value).put("confidence", it.confidence) }))
             put("text", p.redactedText)
         }.toString().replace("\\/", "/")
         return "$head\n\nDATA:\n$data" + (if (note != null) "\n\nNOTE FROM THE APP (computed on the device): $note" else "")

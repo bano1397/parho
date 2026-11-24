@@ -3,7 +3,7 @@ package app.parho.reader
 // Port of the router: decides where each step runs and records why (shown as a timeline).
 // Rule: the PHOTO never leaves the phone. Unredacted text only ever goes to the ON-DEVICE model.
 
-enum class NanoStatus { AVAILABLE, UNAVAILABLE }
+enum class NanoStatus { AVAILABLE, DOWNLOADING, UNAVAILABLE }
 
 interface Engines {
     suspend fun nanoStatus(): NanoStatus
@@ -35,6 +35,8 @@ class Pipeline(
                     return sanitizeExtraction(ex.copy(text = ocrText))
                 } catch (e: Exception) {
                     if (e is PrivacyBlocked) throw e
+                    // Leaving the screen must stop the work; only a Nano timeout counts as "unusable answer".
+                    if (e is kotlinx.coroutines.CancellationException && e !is kotlinx.coroutines.TimeoutCancellationException) throw e
                 }
             }
             log(TimelineEntry("read", true, "Gemini Nano (this device)", "Gemini Nano gave an unusable answer twice — switching to fallback", clock() - t0))

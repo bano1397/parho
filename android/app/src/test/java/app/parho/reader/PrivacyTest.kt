@@ -207,3 +207,56 @@ class PipelineTest {
         assertTrue(billNote(e)!!.contains("78% higher"))
     }
 }
+
+// Deep-test regressions (24 Nov): ports of the web "24 Nov" tests plus the Android ICU \w/\b cases.
+class DeepTest24Nov {
+    private fun bill(vararg f: Pair<String, String>, text: String = "") =
+        Extraction("bill", "x", f.map { Field(it.first, it.second) }, emptyList(), text)
+
+    @Test fun commaGroupedHistoryUnitsAreWholeNumbers() =
+        assertNull(billNote(bill("Units" to "1,300", "History" to "NOV-25 1,250 DEC-25 1,100 JAN-26 1,180")))
+
+    @Test fun monthYearWithSpaceIsNotUnits() =
+        assertTrue(billNote(bill("Units" to "450", "History" to "NOV 25 300 DEC 25 280"))!!.contains("55% higher"))
+
+    @Test fun paymentHistoryLineIgnored() {
+        assertNull(billNote(bill("Units Consumed" to "300", text = "Payment History: 12-10-2026 Rs 5,000")))
+        assertNull(billNote(bill("Units Consumed" to "300", text = "Billing History: Paid 05/10/2026 Rs 1,200")))
+        assertNull(billNote(bill("Units Consumed" to "300", text = "CNIC history: 35202-1234567-1")))
+    }
+
+    @Test fun groupedWapdaReferenceAndUnicodeHyphenBlocked() {
+        for (t in listOf("بل 04 11111 1111111 U", "Consumer ID‐04 11111 1111111", "صارف04-12345-1234567", "Ref 04 11111 1111111"))
+            assertNotNull(t, findPrivate(t))
+        assertTrue(redact("Consumer I.D. 0412345678901").contains("[ACCOUNT]"))
+    }
+
+    @Test fun readingsAndDatesNotFlagged() = assertNull(findPrivate("Present 12634 Previous 12603 Units 31 Due 24-11-2026"))
+
+    private fun keepMed(v: String) = sanitizeExtraction(Extraction("medicine", "x", listOf(Field("Active ingredient", v)), emptyList(), "")).fields.size
+
+    @Test fun dailyMaximumAsSecondStrengthDropped() {
+        for (v in listOf("Paracetamol 500 mg, max 4 g", "Ibuprofen 200 mg up to 1200 mg", "Paracetamol 500 mg (4 g limit)")) assertEquals(v, 0, keepMed(v))
+        assertEquals(1, keepMed("Paracetamol 500 mg"))
+    }
+
+    @Test fun exactPharmacistLineAlwaysAppended() {
+        val p = CloudPayload("medicine", "Panadol", listOf(Field("Name", "Panadol")), "", Lang.EN)
+        val out = finishExplanation("Panadol has paracetamol 500 mg. Your pharmacist may say take 2 tablets.", p)
+        assertTrue(out.contains("Ask a doctor or pharmacist how much to take and when."))
+    }
+
+    // On a phone, ICU makes \w and \b include Urdu letters; jsAscii() keeps them ASCII like the web app.
+    @Test fun urduAdjacentIdsAndEmailsBlockedAndRedacted() {
+        for (t in listOf("حوالہLE-04-1234567-U", "LE-04-1234567-Uنمبر", "ali at gmail dot comپر")) {
+            assertNotNull(t, findPrivate(t))
+            assertNull(t, findPrivate(redact(t)))
+        }
+    }
+
+    @Test fun jsAsciiRewritesWordClasses() {
+        assertEquals("[A-Za-z0-9_.+-]", jsAscii("[\\w.+-]"))
+        assertTrue(jsAscii("\\bx\\w").contains("(?<![A-Za-z0-9_])"))
+        assertEquals("\\d\\s\\[", jsAscii("\\d\\s\\["))
+    }
+}

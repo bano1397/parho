@@ -11,7 +11,36 @@ class PrivacyBlocked(val kind: PrivateKind) : Exception("Privacy check blocked t
 
 private const val I = Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
 private const val M = Pattern.MULTILINE
-private fun rx(src: String, flags: Int = 0): Regex = Pattern.compile(src, flags).toRegex()
+private fun rx(src: String, flags: Int = 0): Regex = Pattern.compile(jsAscii(src), flags).toRegex()
+
+private const val W = "A-Za-z0-9_"
+private const val B = "(?:(?<=[$W])(?![$W])|(?<![$W])(?=[$W]))"
+
+/**
+ * On Android, java.util.regex follows ICU rules, where \w and \b include Urdu letters. The web app's JS regexes
+ * (no u flag) treat \w and \b as ASCII only, so a reference ID glued to Urdu text would slip past here but not on
+ * the web. This rewrites \w and \b to explicit ASCII classes so the phone behaves exactly like the web app.
+ */
+internal fun jsAscii(src: String): String {
+    val sb = StringBuilder(src.length + 32)
+    var inClass = false
+    var i = 0
+    while (i < src.length) {
+        val c = src[i]
+        if (c == '\\' && i + 1 < src.length) {
+            val n = src[i + 1]
+            when {
+                n == 'w' -> sb.append(if (inClass) W else "[$W]")
+                n == 'b' && !inClass -> sb.append(B)
+                else -> sb.append(c).append(n)
+            }
+            i += 2; continue
+        }
+        if (c == '[' && !inClass) inClass = true else if (c == ']' && inClass) inClass = false
+        sb.append(c); i++
+    }
+    return sb.toString()
+}
 
 /** Convert Urdu (۰-۹), Arabic-Indic (٠-٩), Devanagari and fullwidth digits to 0-9; drop zero-width characters. */
 fun normaliseDigits(s: String): String {
@@ -21,6 +50,7 @@ fun normaliseDigits(s: String): String {
         when (c) {
             in '\u200B'..'\u200D', '\u2060', '\uFEFF' -> {}
             '\u00A0', '\u2007', '\u202F' -> sb.append(' ')
+            '\u2010', '\u2011', '\u2212' -> sb.append('-')
             in '\u0966'..'\u096F' -> sb.append('0' + (c - '\u0966'))
             in '\u06F0'..'\u06F9' -> sb.append('0' + (c - '\u06F0'))
             in '\u0660'..'\u0669' -> sb.append('0' + (c - '\u0660'))
@@ -45,6 +75,8 @@ val PATTERNS: List<KindPattern> = listOf(
     KindPattern(PrivateKind.EMAIL, rx("[\\w.+-]+\\s*(@|\\[at\\]|\\(at\\))\\s*[\\w-]+\\s*\\.\\s*[a-z]{2,}(\\.[a-z]{2,})*", I)),
     KindPattern(PrivateKind.LONG_NUMBER, rx("(?<![\\w-])(?=[\\w-]*[a-z])(?=(?:[\\w-]*?\\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\\w-])", I)),
     KindPattern(PrivateKind.LONG_NUMBER, rx("(?<!\\d)\\d{10,}(?!\\d)")),
+    // WAPDA-style reference numbers printed in groups: "04 11111 1111111 U".
+    KindPattern(PrivateKind.LONG_NUMBER, rx("(?<!\\d)(?<!\\d-)\\d{2}[\\s-]?\\d{5}[\\s-]?\\d{7}(?:\\s?[A-Z](?![A-Za-z]))?(?![\\d-])")),
 )
 
 private val IMAGE_RE = rx("data:image|[A-Za-z0-9+/=]{200,}")
@@ -86,7 +118,7 @@ private val LABELLED: List<Pair<String, Regex>> = listOf(
     "NAME" to rx("^(\\s*(?:name(?!\\s*of\\b)|naam|bill\\s*to|account\\s*title|title\\s*of\\s*account|holder|walid|wald|sender)\\s*[:\\-–.]?\\s*)(?!\\[)((?:\\p{Lu}|[\\u0600-\\u06FF]).*)$", I or M),
     "NAME" to rx("^(\\s*(?:ولد|بنت|زوجہ|ولدیت\\s*:?)\\s*)(?!\\[)(\\S.*)$", M),
     "ADDRESS" to rx("^(\\s*(?:address|addr\\.?|service\\s*address|postal\\s*address|pata|پتہ|پتا)\\s*[:\\-–.]?\\s*)(?!\\[)(\\S.*)$", I or M),
-    "ACCOUNT" to rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|#|number))?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", I or M),
+    "ACCOUNT" to rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|i\\.d\\.?|#|number))?|حوالہ\\s*نمبر|ریفرنس(?:\\s*نمبر)?|صارف(?:\\s*نمبر)?|بل\\s*نمبر|اکاؤنٹ(?:\\s*نمبر)?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", I or M),
 )
 
 private val ADDRESS_WORDS = rx("\\b(?:house|h\\.\\s*no|h#|street|st\\.\\s*no|gali|block|sector|mohalla|muhalla|chak|ck\\s*no|village|tehsil|colony|town|phase|plot|dha|road)\\b\\.?\\s*(?:no\\.?|#)?\\s*[\\w-]*[^,\\n]{0,60}", I)
