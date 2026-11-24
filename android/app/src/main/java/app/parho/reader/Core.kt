@@ -180,13 +180,16 @@ const val BILL_JUMP_RATIO = 0.5
 private val MONTH_TOKEN = rx("\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\b")
 private val NUM_DATE = rx("\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b")
 private val THOUSANDS = rx("(\\d),(?=\\d{3}(?!\\d))")
-private val MONTH_YEAR = rx("[a-z]{3,9}\\.?\\s*[-'’]?\\s*(?:(?:19|20)\\d{2}|\\d{2})(?!\\d)")
+private val MONTH_YEAR = rx("[a-z]{3,9}\\.?\\s*[-'’]?\\s*(?:19|20)\\d{2}(?!\\d)")
+// Two-digit years only when joined ("NOV-25", "NOV'25", "NOV25") or followed by another number ("NOV 25 300").
+private val MONTH_YEAR2 = rx("[a-z]{3,9}(?:\\.?[-'’]|\\.?)\\d{2}(?!\\d)|[a-z]{3,9}\\.?\\s+\\d{2}(?=\\s+\\d)")
 
 /** Units numbers from a history value: drops dates, month-year tokens ("NOV-25", "NOV 25", "Nov 2025") and thousands commas. */
 fun historyNumbers(value: String): List<Int> {
     var v = NUM_DATE.replace(value, " ")
     v = THOUSANDS.replace(v, "$1")
     v = MONTH_YEAR.replace(v, " ")
+    v = MONTH_YEAR2.replace(v, " ")
     return Regex("\\d{1,5}").findAll(v).map { it.value.toInt() }.filter { it in 1..4999 && it !in 1990..2100 }.toList()
 }
 

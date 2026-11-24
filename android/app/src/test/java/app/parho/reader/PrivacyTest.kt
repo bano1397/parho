@@ -260,3 +260,46 @@ class DeepTest24Nov {
         assertEquals("\\d\\s\\[", jsAscii("\\d\\s\\["))
     }
 }
+
+class FinalCheck25Nov {
+    private val tag = Regex("\\[[A-Z_]+\\]")
+
+    @Test fun uppercaseIdsEmailsAndIbansAreRedactedNotBlocked() {
+        for (t in listOf("LE-04-1234567-U", "ALI.KHAN@GMAIL.COM", "pk36 scbl 0000 0011 2345 6702", "حوالہLE-04-1234567-Uنمبر")) {
+            val r = redact(t)
+            assertNull(t, findPrivate(r))
+            assertTrue(t, tag.containsMatchIn(r))
+        }
+    }
+
+    @Test fun numbersAfterUrduIdLabelsAreRedacted() {
+        assertTrue(redact("حوالہ نمبر: 12345678").contains("[ACCOUNT]"))
+        assertTrue(redact("ریفرنس نمبر 123456789").contains("[ACCOUNT]"))
+    }
+
+    @Test fun unhyphenatedIdsAndLandlinesAreCaught() {
+        for (t in listOf("LE041234567U", "042 35761234", "+92 42 35761234")) assertNotNull(t, findPrivate(t))
+        assertNull(findPrivate("Due Date: 24-11-2026 Amount Rs 18,450 Units 412"))
+    }
+
+    @Test fun lowercaseAfterNameLabelIsNotAName() {
+        assertTrue(redact("Name due date 12-05-2025").contains("12-05-2025"))
+        assertTrue(redact("Naam Ahmed Khan").contains("[NAME]"))
+    }
+
+    @Test fun twoDigitUnitsAfterMonthNamesAreUnits() {
+        val e = Extraction("bill", "x", listOf(Field("Units", "130"), Field("History", "Jun 80 Jul 80 Aug 80")), emptyList(), "")
+        assertTrue(billNote(e)!!.contains("63% higher"))
+    }
+
+    @Test fun unicodeSpacesSplitCnicAreCaught() {
+        assertNotNull(findPrivate("35202 1234567 1"))
+        assertNotNull(findPrivate("35202 1234567 1"))
+    }
+
+    @Test fun alreadyRedactedLabelsKeepTheirColon() {
+        assertEquals("Address: [ADDRESS]", redact("Address: [ADDRESS]"))
+        assertEquals("Consumer Name: [NAME]", redact("Consumer Name: [NAME]"))
+        assertEquals("Consumer Name: [NAME]", redact("Consumer Name: Ahmed Khan"))
+    }
+}

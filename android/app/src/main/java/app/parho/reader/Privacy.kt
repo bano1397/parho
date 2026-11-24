@@ -50,6 +50,8 @@ fun normaliseDigits(s: String): String {
         when (c) {
             in '\u200B'..'\u200D', '\u2060', '\uFEFF' -> {}
             '\u00A0', '\u2007', '\u202F' -> sb.append(' ')
+            // Other Unicode spaces: JS \s matches them, java.util.regex \s does not, so map them for parity.
+            '\u1680', in '\u2000'..'\u200A', '\u2028', '\u2029', '\u205F', '\u3000' -> sb.append(' ')
             '\u2010', '\u2011', '\u2212' -> sb.append('-')
             in '\u0966'..'\u096F' -> sb.append('0' + (c - '\u0966'))
             in '\u06F0'..'\u06F9' -> sb.append('0' + (c - '\u06F0'))
@@ -68,12 +70,13 @@ val PATTERNS: List<KindPattern> = listOf(
     KindPattern(PrivateKind.CNIC, rx("(?<!\\d)\\d{5}${SEP}\\d{7}${SEP}\\d(?!\\d)")),
     KindPattern(PrivateKind.CNIC, rx("(?<!\\d)\\d{4}\\s\\d{4}\\s\\d{4}\\s\\d(?!\\d)")),
     KindPattern(PrivateKind.PHONE, rx("(?<!\\d)(\\+\\s*92${SEP}|0092${SEP}|92${SEP}|\\(?0)\\s*3\\d{2}\\)?${SEP}\\d{3}${SEP}\\d{4}(?!\\d)")),
-    KindPattern(PrivateKind.PHONE, rx("(?<![\\d-])0\\d{2,3}\\s*-\\s*\\d{7,8}(?!\\d)")),
+    KindPattern(PrivateKind.PHONE, rx("(?<![\\d-])0\\d{2,3}\\s*[-\\s]\\s*\\d{7,8}(?!\\d)")), // 042-35761234, 042 35761234
+    KindPattern(PrivateKind.PHONE, rx("(?:\\+\\s*|00)92[\\s-]*\\(?\\d{2,3}\\)?[\\s-]*\\d{7,8}(?!\\d)")), // +92 42 35761234
     KindPattern(PrivateKind.CNIC, rx("(?<![\\d-])(?:\\d[\\s-]?){12}\\d(?![\\d-])")),
     KindPattern(PrivateKind.EMAIL, rx("\\b[\\w.+-]+\\s+at\\s+[\\w-]+\\s+dot\\s+(?:com|pk|net|org)\\b", I)),
     KindPattern(PrivateKind.LONG_NUMBER, rx("\\bPK\\s?\\d{2}\\s?[A-Z]{4}(?:\\s?\\d){16}\\b", I)),
     KindPattern(PrivateKind.EMAIL, rx("[\\w.+-]+\\s*(@|\\[at\\]|\\(at\\))\\s*[\\w-]+\\s*\\.\\s*[a-z]{2,}(\\.[a-z]{2,})*", I)),
-    KindPattern(PrivateKind.LONG_NUMBER, rx("(?<![\\w-])(?=[\\w-]*[a-z])(?=(?:[\\w-]*?\\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\\w-])", I)),
+    KindPattern(PrivateKind.LONG_NUMBER, rx("(?<![\\w-])(?=[\\w-]*[a-z])(?=(?:[\\w-]*?\\d){7})[a-z0-9]+(?:-[a-z0-9]+)*(?![\\w-])", I)), // also unhyphenated: LE041234567U
     KindPattern(PrivateKind.LONG_NUMBER, rx("(?<!\\d)\\d{10,}(?!\\d)")),
     // WAPDA-style reference numbers printed in groups: "04 11111 1111111 U".
     KindPattern(PrivateKind.LONG_NUMBER, rx("(?<!\\d)(?<!\\d-)\\d{2}[\\s-]?\\d{5}[\\s-]?\\d{7}(?:\\s?[A-Z](?![A-Za-z]))?(?![\\d-])")),
@@ -112,24 +115,35 @@ private fun flexibleRe(value: String): Regex? {
     return rx("(?<![\\p{L}\\p{N}])$body(?![\\p{L}\\p{N}])", I)
 }
 
+private val COLONLESS_NAME = rx("^(\\s*(?:name(?!\\s*of\\b)|naam|bill\\s*to|account\\s*title|title\\s*of\\s*account|holder|walid|wald|sender)\\s*[:\\-–.]?\\s*)(?!\\[)((?:\\p{Lu}|[\\u0600-\\u06FF]).*)$", I or M)
+private val CAP_OR_URDU = Regex("^[\\p{Lu}\\u0600-\\u06FF]")
+
 private val LABELLED: List<Pair<String, Regex>> = listOf(
     "NAME" to rx("^(\\s*(?:(?:to|name|patient|bill\\s*to)\\s*:|(?:consumer(?:'s)?|customer|father(?:'s)?|patient)\\s*name\\s*[:\\-–.]?|s/o|d/o|w/o|mr\\.?|mrs\\.?|ms\\.?|نام\\s*:?|بنام)\\s*)(?!\\s*\\[)(\\S.*)$", I or M),
     "NAME" to rx("^(\\s*dear\\s+)(?!\\[)([^,\\n]+)", I or M),
-    "NAME" to rx("^(\\s*(?:name(?!\\s*of\\b)|naam|bill\\s*to|account\\s*title|title\\s*of\\s*account|holder|walid|wald|sender)\\s*[:\\-–.]?\\s*)(?!\\[)((?:\\p{Lu}|[\\u0600-\\u06FF]).*)$", I or M),
+    "NAME" to COLONLESS_NAME,
     "NAME" to rx("^(\\s*(?:ولد|بنت|زوجہ|ولدیت\\s*:?)\\s*)(?!\\[)(\\S.*)$", M),
     "ADDRESS" to rx("^(\\s*(?:address|addr\\.?|service\\s*address|postal\\s*address|pata|پتہ|پتا)\\s*[:\\-–.]?\\s*)(?!\\[)(\\S.*)$", I or M),
-    "ACCOUNT" to rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|i\\.d\\.?|#|number))?|حوالہ\\s*نمبر|ریفرنس(?:\\s*نمبر)?|صارف(?:\\s*نمبر)?|بل\\s*نمبر|اکاؤنٹ(?:\\s*نمبر)?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", I or M),
+    "ACCOUNT" to rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|i\\.d\\.?|#|number))?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", I or M),
+    // Urdu ID labels ("حوالہ نمبر: 12345678"); kept out of the \b group above, which never matches before Urdu letters.
+    "ACCOUNT" to rx("((?:حوالہ\\s*نمبر|ریفرنس(?:\\s*نمبر)?|صارف(?:\\s*نمبر)?|بل\\s*نمبر|اکاؤنٹ(?:\\s*نمبر)?|کنزیومر(?:\\s*نمبر)?)\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{4,}\\d(?:\\s?[A-Z](?![A-Za-z]))?|(?=[\\w-]*\\d)[\\w-]{5,})", I or M),
 )
 
 private val ADDRESS_WORDS = rx("\\b(?:house|h\\.\\s*no|h#|street|st\\.\\s*no|gali|block|sector|mohalla|muhalla|chak|ck\\s*no|village|tehsil|colony|town|phase|plot|dha|road)\\b\\.?\\s*(?:no\\.?|#)?\\s*[\\w-]*[^,\\n]{0,60}", I)
 private val LABEL_TOKEN = rx("^\\[[A-Z_]+\\]$")
+private val ALREADY_REDACTED = Regex("^[:\\-–.\\s]*\\[[A-Z_]+\\]$")
 
 fun redactLabelledLines(text: String): String {
     var out = text
     for ((kind, re) in LABELLED) {
         out = re.replace(out) { m ->
             val head = m.groupValues[1]; val v = m.groupValues[2]
-            if (LABEL_TOKEN.matches(v.trim())) head + v else "$head[$kind]"
+            when {
+                ALREADY_REDACTED.matches(v.trim()) -> m.value
+                // The colon-less name labels only count when a capitalised or Urdu word follows ("Name due date …" is not a name).
+                re === COLONLESS_NAME && !CAP_OR_URDU.containsMatchIn(v) -> m.value
+                else -> "$head[$kind]"
+            }
         }
     }
     return ADDRESS_WORDS.replace(out) { m -> if (m.value.startsWith("[")) m.value else "[ADDRESS]" }

@@ -27,6 +27,7 @@ dependencies {
     implementation("com.google.firebase:firebase-ai")
     implementation("com.google.firebase:firebase-ai-ondevice:16.0.0-beta07")
     implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation(platform("androidx.compose:compose-bom:2026.05.00"))
     implementation("androidx.compose.material3:material3")

@@ -36,6 +36,12 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.selection.toggleable
+import android.content.ActivityNotFoundException
+import android.util.Log
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -105,8 +111,13 @@ private val SAMPLES = listOf(
     Sample("sample_medicine.png", "Medicine box", "دوا کا ڈبہ"),
 )
 
+private const val EXPLAINING = "Cloud Gemini is writing the explanation…"
+
+/** One on-device recognizer for the whole app (creating one per photo leaks native resources). */
+private val RECOGNIZER by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+
 private suspend fun ocr(bmp: Bitmap): String = suspendCancellableCoroutine { c ->
-    TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromBitmap(bmp, 0))
+    RECOGNIZER.process(InputImage.fromBitmap(bmp, 0))
         .addOnSuccessListener { r -> c.resume(r.textBlocks.joinToString("\n") { b -> b.lines.joinToString("\n") { it.text } }) }
         .addOnFailureListener { c.resumeWithException(it) }
 }
@@ -139,15 +150,25 @@ private fun scaled(b: Bitmap): Bitmap {
     return Bitmap.createScaledBitmap(b, (b.width * k).toInt(), (b.height * k).toInt(), true)
 }
 
-private fun friendly(e: Throwable): String = when (e) {
-    is PrivacyBlocked -> "Stopped to protect you: something that looks like a ${e.kind.name.replace('_', ' ').lowercase()} was still in the text, so nothing was sent."
-    is UserCancelled -> "Cancelled. Nothing was sent."
-    else -> {
-        val s = e.toString()
-        when {
-            Regex("app.?check|403|permission", RegexOption.IGNORE_CASE).containsMatchIn(s) -> "The cloud refused the request (App Check). Nothing private was sent. ($s)"
-            Regex("Unable to resolve host|network|timeout", RegexOption.IGNORE_CASE).containsMatchIn(s) -> "No internet. Reading works on this phone; the explanation needs a connection."
-            else -> "Something went wrong: ${s.take(200)}"
+/** Short, bilingual messages for people; the raw exception only goes to logcat. */
+private fun friendly(e: Throwable, lang: Lang = Lang.UR): String {
+    if (e !is PrivacyBlocked && e !is UserCancelled) Log.w("Parho", "step failed", e)
+    val ur = lang != Lang.EN
+    return when (e) {
+        is PrivacyBlocked -> if (ur) "آپ کی حفاظت کے لیے روک دیا گیا: متن میں ذاتی نمبر باقی تھا، اس لیے کچھ نہیں بھیجا گیا۔\nStopped to protect you: a private number was still in the text, so nothing was sent."
+            else "Stopped to protect you: something that looks like a ${e.kind.name.replace('_', ' ').lowercase()} was still in the text, so nothing was sent."
+        is UserCancelled -> if (ur) "منسوخ کر دیا۔ کچھ نہیں بھیجا گیا۔\nCancelled. Nothing was sent." else "Cancelled. Nothing was sent."
+        is IllegalStateException -> e.message ?: "Something went wrong."
+        else -> {
+            val s = e.toString()
+            when {
+                Regex("app.?check|403|permission", RegexOption.IGNORE_CASE).containsMatchIn(s) ->
+                    if (ur) "کلاؤڈ نے یہ درخواست قبول نہیں کی۔ کچھ ذاتی نہیں بھیجا گیا۔\nThe cloud refused this app (App Check). Nothing private was sent." else "The cloud refused this app (App Check). Nothing private was sent."
+                Regex("\\b50[023]\\b|busy|overload|high demand", RegexOption.IGNORE_CASE).containsMatchIn(s) ->
+                    if (ur) "کلاؤڈ ابھی مصروف ہے۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔\nThe cloud is busy. Please try again in a moment." else "The cloud is busy. Please try again in a moment."
+                else ->
+                    if (ur) "کلاؤڈ تک نہیں پہنچ سکے۔ انٹرنیٹ چیک کر کے دوبارہ کوشش کریں۔\nCouldn't reach the cloud. Check your internet and try again." else "Couldn't reach the cloud. Check your internet and try again. Reading still works on this phone."
+            }
         }
     }
 }
@@ -169,6 +190,7 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
     var confirmText by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf<CompletableDeferred<Boolean>?>(null) }
     val timeline = remember { mutableStateListOf<TimelineEntry>() }
+    var explainGen by remember { mutableStateOf(0) }
     val pipeline = remember { Pipeline(RealEngines, { e -> timeline.add(e) }) }
     val t = UI.getValue(lang)
 
@@ -184,7 +206,7 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
 
     fun rebuild(l: Lang) {
         val e = ex ?: return
-        payload = try { buildCloudPayload(e, l) } catch (x: Throwable) { error = friendly(x); null }
+        payload = try { buildCloudPayload(e, l) } catch (x: Throwable) { error = friendly(x, lang); null }
     }
 
     fun run(bmp: Bitmap) {
@@ -207,7 +229,7 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
                 ex = result
                 timeline.add(TimelineEntry("redact", true, "this device", "${result.privateValues.size} private detail(s) found and kept on this phone", 0))
                 rebuild(lang)
-            } catch (e: Throwable) { error = friendly(e) } finally { busy = null }
+            } catch (e: Throwable) { error = friendly(e, lang) } finally { busy = null }
         }
     }
 
@@ -231,13 +253,14 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
                 Text("Parho ", fontSize = 28.sp * scale, fontWeight = FontWeight.Bold)
                 Text("پڑھو", fontSize = 24.sp * scale, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
-            Text("Photograph a bill, notice or medicine box. Parho reads it on this phone and explains it in simple ${if (lang == Lang.EN) "English" else "Urdu"}.", fontSize = 15.sp * scale)
+            Text("Photograph a bill, notice or medicine box. Parho reads it on this phone and explains it in simple ${when (lang) { Lang.EN -> "English"; Lang.ROMAN_UR -> "Roman Urdu"; else -> "Urdu" }}.", fontSize = 15.sp * scale)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 Row(Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(50))) {
                     listOf(Lang.EN to "English", Lang.UR to "اردو").forEach { (l, label) ->
-                        val on = if (l == Lang.EN) lang == Lang.EN else lang != Lang.EN
+                        val on = lang == l
                         Text(label, Modifier.clip(RoundedCornerShape(50)).background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .clickable { lang = l; answer = ""; rebuild(l) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lang_${l.code}"),
+                            .clickable(role = Role.Tab, onClickLabel = if (l == Lang.EN) "Explain in English" else "Explain in Urdu") { lang = l; answer = ""; explainGen++; if (busy == EXPLAINING) busy = null; rebuild(l) }
+                            .semantics { selected = on }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lang_${l.code}"),
                             color = if (on) MaterialTheme.colorScheme.onPrimary else fg, fontWeight = FontWeight.SemiBold, fontSize = 15.sp * scale)
                     }
                 }
@@ -246,7 +269,7 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
 
             Card("1. Your paper") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { camera.launch(camUri) }, enabled = busy == null && confirm == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("📷 ${t[0]}", fontSize = 16.sp * scale) }
+                    Button(onClick = { try { camera.launch(camUri) } catch (_: ActivityNotFoundException) { error = if (lang == Lang.EN) "No camera app found on this phone. Choose a photo instead." else "اس فون پر کیمرہ ایپ نہیں ملی۔ گیلری سے تصویر چنیں۔\nNo camera app found. Choose a photo instead." } }, enabled = busy == null && confirm == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("📷 ${t[0]}", fontSize = 16.sp * scale) }
                     OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = busy == null && confirm == null, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) { Text("🖼 ${t[1]}", fontSize = 16.sp * scale) }
                 }
                 Text("Or try a sample (fake data):", fontSize = 14.sp * scale)
@@ -296,7 +319,7 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
                 Card("3. What the cloud will see") {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(Lang.UR to "اردو", Lang.ROMAN_UR to "Roman Urdu", Lang.EN to "English").forEach { (l, n) ->
-                            FilterChip(selected = lang == l, onClick = { lang = l; answer = ""; rebuild(l) }, label = { Text(n) })
+                            FilterChip(selected = lang == l, onClick = { lang = l; answer = ""; explainGen++; if (busy == EXPLAINING) busy = null; rebuild(l) }, label = { Text(n) })
                         }
                     }
                     Text("${json.toByteArray().size} bytes · text only · no photo", fontSize = 13.sp * scale)
@@ -304,9 +327,13 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
                     Button(onClick = {
                         val e = ex ?: return@Button
                         error = null; answer = ""
+                        val g = ++explainGen
                         scope.launch {
-                            busy = "Cloud Gemini is writing the explanation…"
-                            try { answer = pipeline.explain(p, e) } catch (x: Throwable) { error = friendly(x) } finally { busy = null }
+                            busy = EXPLAINING
+                            // A language switch bumps explainGen, so an answer still on its way in the old language is dropped.
+                            try { val a = pipeline.explain(p, e); if (g == explainGen) answer = a }
+                            catch (x: Throwable) { if (g == explainGen && x !is kotlinx.coroutines.CancellationException) error = friendly(x, lang) }
+                            finally { if (g == explainGen) busy = null }
                         }
                     }, enabled = busy == null && confirm == null, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("explain")) { Text("☁️ ${t[2]}", fontSize = 16.sp * scale) }
                 }
@@ -335,8 +362,8 @@ fun ParhoScreen(speak: (String, Lang) -> Boolean) {
             }
 
             Card("Settings") {
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(large, { large = it }); Text("Large text  بڑا متن") }
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(contrast, { contrast = it }); Text("High contrast  زیادہ واضح رنگ") }
+                Row(Modifier.toggleable(value = large, role = Role.Checkbox) { large = it }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(large, null); Text("Large text  بڑا متن") }
+                Row(Modifier.toggleable(value = contrast, role = Role.Checkbox) { contrast = it }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(contrast, null); Text("High contrast  زیادہ واضح رنگ") }
             }
             Text("Hybrid AI with Firebase AI Logic: text is read on this phone (ML Kit, and Gemini Nano where available); Gemini in the cloud writes the Urdu from redacted text only. Photos are never uploaded. Samples contain fake data. Not advice.", fontSize = 12.sp, color = fg.copy(alpha = .7f))
         }
