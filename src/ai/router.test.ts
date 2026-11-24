@@ -187,3 +187,11 @@ describe('medicine max-dose regressions (24 Nov)', () => {
     expect(out).toContain('Ask a doctor or pharmacist how much to take and when.');
   });
 });
+
+describe('two-digit units after month names (25 Nov)', () => {
+  it('keeps "Jun 80" as 80 units, not a year', () => {
+    const ex = { doc_type: 'bill', title: 'x', private_values: [], source: 'nano', text: '',
+      fields: [{ label: 'Units', value: '130', confidence: 'high' }, { label: 'History', value: 'Jun 80 Jul 80 Aug 80', confidence: 'high' }] } as never;
+    expect(billNote(ex)).toMatch(/63% higher/);
+  });
+});

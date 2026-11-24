@@ -175,7 +175,7 @@ export default function App() {
   }
 
   const t = T[lang];
-  const busy = phase === 'reading' || phase === 'explaining';
+  const busy = phase === 'reading' || phase === 'explaining' || phase === 'confirm-ocr';
   const payloadText = payload ? JSON.stringify({ ...payload, language: lang }, null, 2) : '';
   const bytes = new TextEncoder().encode(payloadText).length;
 
@@ -189,7 +189,7 @@ export default function App() {
         <div className="row" style={{ alignItems: 'center' }}>
           <div className="langswitch" role="group" aria-label="Explanation language">
             <button aria-pressed={lang === 'en'} className={lang === 'en' ? 'on' : ''} onClick={() => { setLang('en'); setAnswer(''); stopSpeaking(); }}>English</button>
-            <button aria-pressed={lang !== 'en'} className={lang !== 'en' ? 'on' : ''} lang="ur" onClick={() => { setLang('ur'); setAnswer(''); stopSpeaking(); }}>اردو</button>
+            <button aria-pressed={lang === 'ur'} className={lang === 'ur' ? 'on' : ''} lang="ur" onClick={() => { setLang('ur'); setAnswer(''); stopSpeaking(); }}>اردو</button>
           </div>
           <StatusChip nano={nano} online={online} />
         </div>
@@ -355,7 +355,7 @@ export default function App() {
       </section>
 
       <footer>
-        Hybrid AI with Firebase AI Logic: Gemini Nano on-device for reading, Gemini in the cloud for Urdu. Photos are never uploaded or stored.
+        Hybrid AI with Firebase AI Logic: Gemini Nano on-device for reading, Gemini in the cloud for the explanation. Photos are never uploaded or stored.
         Samples contain fake data. Not advice.
       </footer>
     </main>

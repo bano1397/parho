@@ -106,3 +106,25 @@ describe('deep-test privacy regressions (24 Nov)', () => {
     expect(findPrivate('Present 12634 Previous 12603 Units 31 Due 24-11-2026')).toBeNull();
   });
 });
+
+describe('final-check privacy regressions (25 Nov)', () => {
+  it('redacts uppercase IDs, emails and IBANs instead of blocking the whole send', () => {
+    for (const t of ['LE-04-1234567-U', 'ALI.KHAN@GMAIL.COM', 'pk36 scbl 0000 0011 2345 6702', 'حوالہLE-04-1234567-Uنمبر']) {
+      const r = redact(t);
+      expect(findPrivate(r)).toBeNull();
+      expect(r).toMatch(/\[[A-Z_]+\]/);
+    }
+  });
+  it('redacts numbers after Urdu ID labels', () => {
+    expect(redact('حوالہ نمبر: 12345678')).toContain('[ACCOUNT]');
+    expect(redact('ریفرنس نمبر 123456789')).toContain('[ACCOUNT]');
+  });
+  it('catches unhyphenated IDs and spaced or international landlines', () => {
+    for (const t of ['LE041234567U', '042 35761234', '+92 42 35761234']) expect(findPrivate(t)).not.toBeNull();
+    expect(findPrivate('Due Date: 24-11-2026 Amount Rs 18,450 Units 412')).toBeNull();
+  });
+  it('does not treat lowercase text after a name label as a name', () => {
+    expect(redact('Name due date 12-05-2025')).toContain('12-05-2025');
+    expect(redact('Naam Ahmed Khan')).toContain('[NAME]');
+  });
+});

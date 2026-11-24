@@ -188,7 +188,9 @@ export function historyNumbers(value: string): number[] {
   return (value
     .replace(/\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b/g, ' ')
     .replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
-    .replace(/[a-z]{3,9}\.?\s*[-'’]?\s*(?:(?:19|20)\d{2}|\d{2})(?!\d)/gi, ' ')
+    .replace(/[a-z]{3,9}\.?\s*[-'’]?\s*(?:19|20)\d{2}(?!\d)/gi, ' ')
+    // Two-digit years only when joined ("NOV-25", "NOV'25", "NOV25") or followed by another number ("NOV 25 300").
+    .replace(/[a-z]{3,9}(?:\.?[-'’]|\.?)\d{2}(?!\d)|[a-z]{3,9}\.?\s+\d{2}(?=\s+\d)/gi, ' ')
     .match(/\d{1,5}/g) ?? []).map(Number)
     .filter((n) => n > 0 && n < 5000 && !(n >= 1990 && n <= 2100));
 }
