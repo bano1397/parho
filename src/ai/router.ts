@@ -190,7 +190,10 @@ export function billNote(ex: Extraction): string | undefined {
   const hist = fields.filter((f) => /prev|last|history/i.test(f.label) && !/reading/i.test(f.label));
   // If a full history exists, ignore a separate "previous month" field so that month is not counted twice.
   const history = hist.some((f) => /history/i.test(f.label)) ? hist.filter((f) => /history/i.test(f.label)) : hist;
-  const past = history
+  // If the reader left the printed history line out of its fields, read it from the (redacted) text.
+  const histLine = ex.text.match(/^.*\bhistory\b[^:\n]*:(.*)$/im)?.[1];
+  const source = hist.some((f) => /history/i.test(f.label)) || !histLine ? history : [{ label: 'History', value: histLine }];
+  const past = source
     .flatMap((f) => (f.value.replace(/[a-z]{3,9}(?:[-'’]?\d{2}|\.?\s*[-'’]?\s*(?:19|20)\d{2})(?!\d)/gi, ' ').match(/\d{1,5}/g) ?? []).map(Number))
     .filter((n) => n > 0 && n < 5000 && !(n >= 1990 && n <= 2100));
   if (!units || past.length === 0) return undefined;

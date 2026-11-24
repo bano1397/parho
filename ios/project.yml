@@ -1,0 +1,47 @@
+name: Parho
+options:
+  bundleIdPrefix: app.parho
+  deploymentTarget: { iOS: "27.0" }
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 13.1.1
+targets:
+  Parho:
+    type: application
+    platform: iOS
+    sources: [Parho]
+    dependencies:
+      - package: Firebase
+        product: FirebaseAILogic
+      - package: Firebase
+        product: FirebaseAppCheck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.parho.reader
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Parho
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Parho reads your paper on this phone. The photo is never uploaded."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Choose a photo of a bill, notice or medicine box. It is read on this phone and never uploaded."
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+  ParhoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [ParhoTests]
+    dependencies: [{ target: Parho }]
+    settings:
+      base: { GENERATE_INFOPLIST_FILE: YES, SWIFT_VERSION: "6.0", SWIFT_STRICT_CONCURRENCY: minimal }
+schemes:
+  Parho:
+    build: { targets: { Parho: all, ParhoTests: [test] } }
+    test: { targets: [ParhoTests] }

@@ -147,3 +147,12 @@ describe('medicine allow-list', () => {
     expect(m([{ label: 'Indication', value: 'take 2 tablets every 6 hours' }])).toEqual([]);
   });
 });
+
+describe('bill note history from text', () => {
+  it('uses the printed History line when the fields leave it out', () => {
+    const ex = { doc_type: 'bill', title: 'x', private_values: [], source: 'cloud_from_ocr',
+      text: 'Units Consumed: 412\nHistory: Oct 188 | Sep 205 | Aug 260 | Jul 274',
+      fields: [{ label: 'Units Consumed', value: '412', confidence: 'high' }, { label: 'Previous Month Units', value: '188', confidence: 'high' }] } as never;
+    expect(billNote(ex)).toMatch(/78% higher/);
+  });
+});

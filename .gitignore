@@ -35,3 +35,13 @@ playwright-report/
 
 # OCR worker/core copied from node_modules at build time
 public/tesseract/*.js
+
+# Native app Firebase configs (regenerate with firebase apps:sdkconfig)
+ios/Parho/GoogleService-Info.plist
+android/app/google-services.json
+ios/build/
+ios/*.xcodeproj/xcuserdata/
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
