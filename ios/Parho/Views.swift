@@ -11,7 +11,7 @@ struct T {
     let take, choose, send, sendExplain, listen, noVoice: String
     static func of(_ l: Lang) -> T {
         switch l {
-        case .ur: T(take: "تصویر لیں", choose: "تصویر چنیں", send: "کلاؤڈ کو بھیجیں", sendExplain: "بھیجیں اور سمجھائیں", listen: "سنائیں", noVoice: "اس فون میں اردو آواز موجود نہیں۔ رومن اردو یا انگریزی آزمائیں۔ (No Urdu voice on this phone.)")
+        case .ur: T(take: "تصویر لیں", choose: "تصویر چنیں", send: "کلاؤڈ کو بھیجیں", sendExplain: "بھیجیں اور سمجھائیں", listen: "سنائیں", noVoice: "اس فون میں اردو آواز موجود نہیں۔ رومن اردو یا انگریزی آزمائیں۔\nNo Urdu voice on this phone.")
         case .roman_ur: T(take: "Tasveer lein", choose: "Tasveer chunein", send: "Cloud ko bhejein", sendExplain: "Bhejein aur samjhayein", listen: "Sunayein", noVoice: "No voice found on this phone. Try English.")
         case .en: T(take: "Take a photo", choose: "Choose a photo", send: "Send to cloud", sendExplain: "Send & explain", listen: "Read aloud", noVoice: "No voice found on this phone.")
         }
@@ -62,7 +62,8 @@ struct RootView: View {
             .onChange(of: p.answer) { _, a in if !a.isEmpty { withAnimation { proxy.scrollTo("answer", anchor: .top) } } }
         }
         .background(contrast ? (scheme == .dark ? Color.black : Color.white) : Color(.systemGroupedBackground))
-        .dynamicTypeSize(large ? .xxxLarge : .large)
+        // Respect the phone's text size (up to the accessibility sizes); "Large text" sets a bigger minimum.
+        .dynamicTypeSize(large ? DynamicTypeSize.xxxLarge...DynamicTypeSize.accessibility5 : DynamicTypeSize.xSmall...DynamicTypeSize.accessibility5)
         .tint(.parhoGreen)
         .onChange(of: pick) { _, item in
             guard let item else { return }
@@ -84,10 +85,11 @@ struct RootView: View {
                 Text("Parho").font(.largeTitle.bold())
                 Text("پڑھو").font(.title).foregroundStyle(Color.parhoGreen)
             }
-            Text("Photograph a bill, notice or medicine box. Parho reads it **on this phone** and explains it in simple \(p.lang == .en ? "English" : "Urdu").")
+            Text("Photograph a bill, notice or medicine box. Parho reads it **on this phone** and explains it in simple \(p.lang == .en ? "English" : p.lang == .roman_ur ? "Roman Urdu" : "Urdu").")
                 .foregroundStyle(.secondary)
             HStack(spacing: 8) {
-                Picker("Language", selection: $p.lang) {
+                // Roman Urdu shows as اردو here (the globe menu picks Roman Urdu), so the switch never shows nothing selected.
+                Picker("Language", selection: Binding(get: { p.lang == .en ? Lang.en : Lang.ur }, set: { p.lang = $0 })) {
                     Text("English").tag(Lang.en)
                     Text("اردو").tag(Lang.ur)
                 }
@@ -211,8 +213,9 @@ struct RootView: View {
             Label("Cloud Gemini", systemImage: "cloud").font(.caption.weight(.semibold)).foregroundStyle(.blue)
             Text(p.answer)
                 .font(p.lang == .ur ? .title3 : .body)
-                .multilineTextAlignment(p.lang == .ur ? .trailing : .leading)
-                .frame(maxWidth: .infinity, alignment: p.lang == .ur ? .trailing : .leading)
+                // .leading is the right edge inside the right-to-left environment below (.trailing would flip to the left).
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .environment(\.layoutDirection, p.lang == .ur ? .rightToLeft : .leftToRight)
                 .lineSpacing(p.lang == .ur ? 8 : 2)
                 .textSelection(.enabled)

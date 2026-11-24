@@ -211,7 +211,9 @@ enum Doc {
     static func historyNumbers(_ value: String) -> [Double] {
         var v = Rx("\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b").replace(value, with: " ")
         v = Rx("(\\d),(?=\\d{3}(?!\\d))").replace(v) { g in g[1] }
-        v = Rx("[a-z]{3,9}\\.?\\s*[-'’]?\\s*(?:(?:19|20)\\d{2}|\\d{2})(?!\\d)", [.caseInsensitive]).replace(v, with: " ")
+        v = Rx("[a-z]{3,9}\\.?\\s*[-'’]?\\s*(?:19|20)\\d{2}(?!\\d)", [.caseInsensitive]).replace(v, with: " ")
+        // Two-digit years only when joined ("NOV-25", "NOV'25", "NOV25") or followed by another number ("NOV 25 300").
+        v = Rx("[a-z]{3,9}(?:\\.?[-'’]|\\.?)\\d{2}(?!\\d)|[a-z]{3,9}\\.?\\s+\\d{2}(?=\\s+\\d)", [.caseInsensitive]).replace(v, with: " ")
         return Rx("\\d{1,5}").matches(v).compactMap(Double.init).filter { $0 > 0 && $0 < 5000 && !($0 >= 1990 && $0 <= 2100) }
     }
 
@@ -246,7 +248,7 @@ enum Doc {
         guard cur.isFinite, cur != 0, avg != 0 else { return nil }
         let ratio = (cur - avg) / avg
         if ratio > BILL_JUMP_RATIO {
-            return "This month's units (\(Int(cur))) are \(Int((ratio * 100).rounded()))% higher than the average of earlier months (\(Int(avg.rounded()))). Mention this gently and suggest checking the meter reading or asking the company; do not say it is fraud."
+            return "This month's units (\(cur == cur.rounded() ? String(Int(cur)) : String(cur))) are \(Int((ratio * 100).rounded()))% higher than the average of earlier months (\(Int(avg.rounded()))). Mention this gently and suggest checking the meter reading or asking the company; do not say it is fraud."
         }
         return nil
     }

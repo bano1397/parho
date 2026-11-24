@@ -128,6 +128,8 @@ final class Pipeline {
         // Drop an explanation still on its way in the old language.
         if phase == .explaining { gen += 1; task?.cancel(); task = nil; phase = .ready }
         stopSpeaking(); answer = ""
+        // The old explanation is gone, so its row leaves the trace too (one cloud call per answer shown).
+        timeline.removeAll { $0.step == "explain" }
         if let ex = extraction { payload = try? Doc.buildCloudPayload(ex, lang) }
     }
 
@@ -165,7 +167,11 @@ final class Pipeline {
         if e is Doc.BadOutput { return "The answer could not be read. Please try again." }
         let s = String(describing: e)
         if s.range(of: "403|app.?check|PERMISSION_DENIED", options: [.regularExpression, .caseInsensitive]) != nil {
+            #if DEBUG
             return "The cloud refused this app (App Check). Register this device's debug token in Firebase, then try again."
+            #else
+            return "The cloud could not verify this app right now. Nothing was sent. Please try again later."
+            #endif
         }
         if s.range(of: "offline|network|internet|NSURLErrorDomain", options: [.regularExpression, .caseInsensitive]) != nil {
             return "No internet. Reading works on the phone; the explanation needs a connection."

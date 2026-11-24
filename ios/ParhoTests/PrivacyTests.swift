@@ -268,4 +268,34 @@ final class DeepTest24NovTests: XCTestCase {
         XCTAssertEqual(Rx.asciiClasses("[\\w.+-]\\b\\d"), "[A-Za-z0-9_.+-]" + Rx.B + "[0-9]")
         XCTAssertTrue(Rx("\\bab\\b").test("x ab y")); XCTAssertFalse(Rx("\\bab\\b").test("xab"))
     }
+
+    // MARK: final-check regressions (25 Nov, web commit 1e2a0aa)
+
+    func testUppercaseIdsEmailsIbansRedactedNotBlocked() {
+        for t in ["LE-04-1234567-U", "ALI.KHAN@GMAIL.COM", "pk36 scbl 0000 0011 2345 6702", "حوالہLE-04-1234567-Uنمبر"] {
+            let r = Privacy.redact(t)
+            XCTAssertNil(Privacy.findPrivate(r), "\(t) → \(r)")
+            XCTAssertNotNil(r.range(of: "\\[[A-Z_]+\\]", options: .regularExpression), r)
+        }
+    }
+    func testUrduIdLabelsRedacted() {
+        XCTAssertTrue(Privacy.redact("حوالہ نمبر: 12345678").contains("[ACCOUNT]"))
+        XCTAssertTrue(Privacy.redact("ریفرنس نمبر 123456789").contains("[ACCOUNT]"))
+    }
+    func testUnhyphenatedIdsAndLandlines() {
+        for t in ["LE041234567U", "042 35761234", "+92 42 35761234"] { XCTAssertNotNil(Privacy.findPrivate(t), t) }
+        XCTAssertNil(Privacy.findPrivate("Due Date: 24-11-2026 Amount Rs 18,450 Units 412"))
+    }
+    func testLowercaseAfterNameLabelIsNotAName() {
+        XCTAssertTrue(Privacy.redact("Name due date 12-05-2025").contains("12-05-2025"))
+        XCTAssertTrue(Privacy.redact("Naam Ahmed Khan").contains("[NAME]"))
+    }
+    func testAlreadyRedactedLabelKeepsColon() {
+        XCTAssertEqual(Privacy.redact("Address: [ADDRESS]"), "Address: [ADDRESS]")
+        XCTAssertEqual(Privacy.redact("Consumer Name: [NAME]"), "Consumer Name: [NAME]")
+    }
+    func testTwoDigitUnitsAfterMonthNames() {
+        let e = Extraction(docType: .bill, title: "x", fields: [Field(label: "Units", value: "130"), Field(label: "History", value: "Jun 80 Jul 80 Aug 80")], privateValues: [], text: "", source: .onDevice)
+        XCTAssertTrue(Doc.billNote(e)?.contains("63% higher") ?? false, Doc.billNote(e) ?? "nil")
+    }
 }

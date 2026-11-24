@@ -101,20 +101,22 @@ enum Privacy {
         (.CNIC, "(?<!\\d)\\d{5}\(SEP)\\d{7}\(SEP)\\d(?!\\d)", false),
         (.CNIC, "(?<!\\d)\\d{4}\\s\\d{4}\\s\\d{4}\\s\\d(?!\\d)", false),
         (.PHONE, "(?<!\\d)(\\+\\s*92\(SEP)|0092\(SEP)|92\(SEP)|\\(?0)\\s*3\\d{2}\\)?\(SEP)\\d{3}\(SEP)\\d{4}(?!\\d)", false),
-        (.PHONE, "(?<![\\d-])0\\d{2,3}\\s*-\\s*\\d{7,8}(?!\\d)", false), // landline 042-35761234
+        (.PHONE, "(?<![\\d-])0\\d{2,3}\\s*[-\\s]\\s*\\d{7,8}(?!\\d)", false), // landline 042-35761234, 042 35761234
+        (.PHONE, "(?:\\+\\s*|00)92[\\s-]*\\(?\\d{2,3}\\)?[\\s-]*\\d{7,8}(?!\\d)", false), // +92 42 35761234
         // CNIC with misplaced hyphens or OCR-spaced digits: any 13 digits joined by single spaces/hyphens.
         (.CNIC, "(?<![\\d-])(?:\\d[\\s-]?){12}\\d(?![\\d-])", false),
         (.EMAIL, "\\b[\\w.+-]+\\s+at\\s+[\\w-]+\\s+dot\\s+(?:com|pk|net|org)\\b", true),
         (.LONG_NUMBER, "\\bPK\\s?\\d{2}\\s?[A-Z]{4}(?:\\s?\\d){16}\\b", true), // IBAN
         (.EMAIL, "[\\w.+-]+\\s*(@|\\[at\\]|\\(at\\))\\s*[\\w-]+\\s*\\.\\s*[a-z]{2,}(\\.[a-z]{2,})*", true),
         // Account/reference IDs mixing letters and 7+ digits, e.g. "LE-04-1234567-U".
-        (.LONG_NUMBER, "(?<![\\w-])(?=[\\w-]*[a-z])(?=(?:[\\w-]*?\\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\\w-])", true),
+        (.LONG_NUMBER, "(?<![\\w-])(?=[\\w-]*[a-z])(?=(?:[\\w-]*?\\d){7})[a-z0-9]+(?:-[a-z0-9]+)*(?![\\w-])", true), // also unhyphenated: LE041234567U
         (.LONG_NUMBER, "(?<!\\d)\\d{10,}(?!\\d)", false),
         // WAPDA-style reference numbers printed in groups: "04 11111 1111111 U".
         (.LONG_NUMBER, "(?<!\\d)(?<!\\d-)\\d{2}[\\s-]?\\d{5}[\\s-]?\\d{7}(?:\\s?[A-Z](?![A-Za-z]))?(?![\\d-])", false),
     ]
     static let findPatterns: [(PrivateKind, Rx)] = patternSpecs.map { ($0.0, Rx($0.1, $0.2 ? [.caseInsensitive] : [])) }
-    static let redactPatterns: [(PrivateKind, Rx)] = patternSpecs.map { ($0.0, Rx($0.1)) }
+    // Redaction keeps the case-insensitive option too, so "LE-04-1234567-U" or "ALI@GMAIL.COM" is replaced, not left to block the whole send.
+    static let redactPatterns: [(PrivateKind, Rx)] = findPatterns
 
     static let imageRe = Rx("data:image|[A-Za-z0-9+/=]{200,}")
 
@@ -163,8 +165,14 @@ enum Privacy {
         ("NAME", Rx("^(\\s*(?:ولد|بنت|زوجہ|ولدیت\\s*:?)\\s*)(?!\\[)(\\S.*)$", [.anchorsMatchLines])),
         ("ADDRESS", Rx("^(\\s*(?:address|addr\\.?|service\\s*address|postal\\s*address|pata|پتہ|پتا)\\s*[:\\-–.]?\\s*)(?!\\[)(\\S.*)$", [.caseInsensitive, .anchorsMatchLines])),
         // ID labels anywhere in a line: "Consumer 041234567 due", "Ref: LE-04-1234567-U".
-        ("ACCOUNT", Rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|i\\.d\\.?|#|number))?|حوالہ\\s*نمبر|ریفرنس(?:\\s*نمبر)?|صارف(?:\\s*نمبر)?|بل\\s*نمبر|اکاؤنٹ(?:\\s*نمبر)?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", [.caseInsensitive, .anchorsMatchLines])),
+        ("ACCOUNT", Rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|i\\.d\\.?|#|number))?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", [.caseInsensitive, .anchorsMatchLines])),
+        // Urdu ID labels ("حوالہ نمبر: 12345678"); kept out of the \\b group above, which never matches before Urdu letters.
+        ("ACCOUNT", Rx("((?:حوالہ\\s*نمبر|ریفرنس(?:\\s*نمبر)?|صارف(?:\\s*نمبر)?|بل\\s*نمبر|اکاؤنٹ(?:\\s*نمبر)?|کنزیومر(?:\\s*نمبر)?)\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{4,}\\d(?:\\s?[A-Z](?![A-Za-z]))?|(?=[\\w-]*\\d)[\\w-]{5,})", [.caseInsensitive, .anchorsMatchLines])),
     ]
+    /// Index of the colon-less NAME label in `labelled` (its value must start with a capital or Urdu letter, checked case-sensitively).
+    static let colonlessNameIndex = 2
+    static let capitalOrUrdu = Rx("^[\\p{Lu}\\u0600-\\u06FF]", ascii: false)
+    static let alreadyRedacted = Rx("^[:\\-–.\\s]*\\[[A-Z_]+\\]$")
 
     // Address words common on Pakistani paperwork; the rest of that segment is treated as an address.
     static let addressWords = Rx("\\b(?:house|h\\.\\s*no|h#|street|st\\.\\s*no|gali|block|sector|mohalla|muhalla|chak|ck\\s*no|village|tehsil|colony|town|phase|plot|dha|road)\\b\\.?\\s*(?:no\\.?|#)?\\s*[\\w-]*[^,\\n]{0,60}", [.caseInsensitive])
@@ -173,10 +181,15 @@ enum Privacy {
 
     static func redactLabelledLines(_ text: String) -> String {
         var out = text
-        for (kind, re) in labelled {
+        for (i, (kind, re)) in labelled.enumerated() {
             out = re.replace(out) { g in
                 let head = g[1], val = g[2]
-                return labelOnly.test(val.trimmingCharacters(in: .whitespaces)) ? head + val : "\(head)[\(kind)]"
+                if labelOnly.test(val.trimmingCharacters(in: .whitespaces)) { return head + val }
+                // "Address: [ADDRESS]" again: keep it as it is (no "Address[ADDRESS]" with the colon eaten).
+                if alreadyRedacted.test(val) { return g[0] }
+                // "Name due date …" is not a name: the case-insensitive search also matched lowercase letters.
+                if i == colonlessNameIndex && !capitalOrUrdu.test(val) { return g[0] }
+                return "\(head)[\(kind)]"
             }
         }
         return addressWords.replace(out) { g in g[0].hasPrefix("[") ? g[0] : "[ADDRESS]" }
