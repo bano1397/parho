@@ -95,3 +95,14 @@ describe('labelled-line redaction (OCR fallback)', () => {
     expect(redact2('Total amount: Rs 500\nDue date: 30-11-2026')).toBe('Total amount: Rs 500\nDue date: 30-11-2026');
   });
 });
+
+describe('deep-test privacy regressions (24 Nov)', () => {
+  it('blocks grouped WAPDA reference numbers and Unicode hyphens', () => {
+    for (const t of ['بل 04 11111 1111111 U', 'Consumer ID‐04 11111 1111111', 'صارف04-12345-1234567', 'Ref 04 11111 1111111'])
+      expect(findPrivate(t)).not.toBeNull();
+    expect(redact('Consumer I.D. 0412345678901')).toContain('[ACCOUNT]');
+  });
+  it('does not flag meter readings or dates', () => {
+    expect(findPrivate('Present 12634 Previous 12603 Units 31 Due 24-11-2026')).toBeNull();
+  });
+});

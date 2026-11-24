@@ -24,7 +24,7 @@ const LABELLED: { kind: PrivateValue['kind']; re: RegExp }[] = [
   { kind: 'NAME', re: /^(\s*(?:ولد|بنت|زوجہ|ولدیت\s*:?)\s*)(?!\[)(\S.*)$/gmu },
   { kind: 'ADDRESS', re: /^(\s*(?:address|addr\.?|service\s*address|postal\s*address|pata|پتہ|پتا)\s*[:\-–.]?\s*)(?!\[)(\S.*)$/gim },
   // ID labels anywhere in a line, not only at its start: "Consumer 041234567 due", "Ref: LE-04-1234567-U".
-  { kind: 'ACCOUNT', re: /(\b(?:account\s*(?:no|#|number|id)|acc\.?\s*(?:no|#)|a\/c\s*(?:no|#)?|consumer(?:\s*(?:no|id|#|number))?|reference\s*(?:no|#|number)?|ref\.?\s*(?:no|#)?|customer\s*(?:id|no|#)|cust\.?\s*(?:id|no|#)|meter(?:\s*(?:no|#|number))?|ac\.?\s*(?:no|#)|iban)\.?\s*[:\-–.]?\s*)(?!\[)(\d[\d\s-]{6,}\d(?:\s?[A-Z]\b)?|(?=[\w-]*\d)[\w-]{5,}(?:\s\d{3,})*)/gim },
+  { kind: 'ACCOUNT', re: /(\b(?:account\s*(?:no|#|number|id)|acc\.?\s*(?:no|#)|a\/c\s*(?:no|#)?|consumer(?:\s*(?:no|id|i\.d\.?|#|number))?|حوالہ\s*نمبر|ریفرنس(?:\s*نمبر)?|صارف(?:\s*نمبر)?|بل\s*نمبر|اکاؤنٹ(?:\s*نمبر)?|reference\s*(?:no|#|number)?|ref\.?\s*(?:no|#)?|customer\s*(?:id|no|#)|cust\.?\s*(?:id|no|#)|meter(?:\s*(?:no|#|number))?|ac\.?\s*(?:no|#)|iban)\.?\s*[:\-–.]?\s*)(?!\[)(\d[\d\s-]{6,}\d(?:\s?[A-Z]\b)?|(?=[\w-]*\d)[\w-]{5,}(?:\s\d{3,})*)/gim },
 ];
 
 // Address words common on Pakistani paperwork; the rest of that line segment is treated as an address.

@@ -72,7 +72,7 @@ const PRIVATE_LABEL = /private|address|cnic|consumer|reference|ref\.?\s*(no|#)|a
 const MED_SAFE_LABEL = /^\s*(brand\s*)?(name|brand|title|product|drug|active[\s_]*ingredients?|ingredients?|generic(\s*name)?|composition|contains|strength|form|(medicine|drug|product|dawai|dawa)\s*(ka\s*)?(name|naam)?)\s*$/i;
 const MED_RISKY_LABEL = /dos|per\s*day|maximum|max|warning|caution|expir|exp\.?\s*date|direction|how\s*to|frequency|every|usage|use|indicat|for\b/i;
 // Anything that looks like a schedule, amount per time, limit, date or warning in a medicine VALUE.
-const MED_RISKY_VALUE = /\d\s*\+\s*\d|\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\b|\bx\s*\d|\d\s*x\b|times|daily|hours?|hrs?|days?|weeks?|\/\s*kg|exceed|before|until|\d{1,2}\s*[/-]\s*\d{2,4}|child|adult|pregnan|take|tablets?\s+every|every|baar|roz|din\b|گولی|روزانہ|بار|دن|خوراک|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات/i;
+const MED_RISKY_VALUE = /\d\s*\+\s*\d|\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\b|\bx\s*\d|\d\s*x\b|times|daily|hours?|hrs?|days?|weeks?|\/\s*kg|exceed|before|until|\d{1,2}\s*[/-]\s*\d{2,4}|child|adult|pregnan|take|tablets?\s+every|every|baar|roz|din\b|گولی|روزانہ|بار|دن|خوراک|max|maximum|up\s*to|limit|per\s*day|\/\s*day|a\s*day|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات/i;
 const STRENGTH_RE = /^\s*\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|%|iu)(\s*\/\s*\d*\s*(ml|g|tab(let)?))?\s*$/i;
 const FORM_RE = /^\s*(tablets?|capsules?|syrup|suspension|drops?|cream|ointment|gel|injection|sachets?|inhaler|spray)\s*$/i;
 
@@ -82,6 +82,8 @@ function medicineFieldOk(f: { label: string; value: string }): boolean {
   if (/^\s*form\s*$/i.test(f.label)) return FORM_RE.test(f.value);
   if (MED_RISKY_VALUE.test(f.value)) return false;
   // Names/ingredients may carry a strength ("Paracetamol 500 mg") but no other numbers.
+  // At most one strength per value: a second one is usually a daily maximum ("500 mg, 4 g").
+  if ((f.value.match(/\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|%|iu)\b/gi) ?? []).length > 1) return false;
   const rest = f.value.replace(/\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|%|iu)\b/gi, '');
   return !/\d/.test(rest);
 }
@@ -180,6 +182,17 @@ export function buildCloudPayload(ex: Extraction, language: CloudPayload['langua
   return payload;
 }
 
+const MONTH_TOKEN = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/gi;
+/** Units numbers from a history value: drops dates, month-year tokens ("NOV-25", "NOV 25", "Nov 2025") and thousands commas. */
+export function historyNumbers(value: string): number[] {
+  return (value
+    .replace(/\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b/g, ' ')
+    .replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
+    .replace(/[a-z]{3,9}\.?\s*[-'’]?\s*(?:(?:19|20)\d{2}|\d{2})(?!\d)/gi, ' ')
+    .match(/\d{1,5}/g) ?? []).map(Number)
+    .filter((n) => n > 0 && n < 5000 && !(n >= 1990 && n <= 2100));
+}
+
 /** Computed on the device: does this bill jump sharply compared to earlier months? */
 export function billNote(ex: Extraction): string | undefined {
   if (ex.doc_type !== 'bill') return undefined;
@@ -190,12 +203,15 @@ export function billNote(ex: Extraction): string | undefined {
   const hist = fields.filter((f) => /prev|last|history/i.test(f.label) && !/reading/i.test(f.label));
   // If a full history exists, ignore a separate "previous month" field so that month is not counted twice.
   const history = hist.some((f) => /history/i.test(f.label)) ? hist.filter((f) => /history/i.test(f.label)) : hist;
-  // If the reader left the printed history line out of its fields, read it from the (redacted) text.
-  const histLine = ex.text.match(/^.*\bhistory\b[^:\n]*:(.*)$/im)?.[1];
-  const source = hist.some((f) => /history/i.test(f.label)) || !histLine ? history : [{ label: 'History', value: histLine }];
-  const past = source
-    .flatMap((f) => (f.value.replace(/[a-z]{3,9}(?:[-'’]?\d{2}|\.?\s*[-'’]?\s*(?:19|20)\d{2})(?!\d)/gi, ' ').match(/\d{1,5}/g) ?? []).map(Number))
-    .filter((n) => n > 0 && n < 5000 && !(n >= 1990 && n <= 2100));
+  // If the reader left the printed history line out of its fields, read it from the (redacted) text,
+  // but only a line that looks like a units history (not "Payment History: 12-10-2026 Rs 5,000").
+  const histLine = ex.text.match(/^.*\bhistory\b[^:\n]*:(.*)$/im);
+  const lineOk = !!histLine && !/\b(rs|pkr|paid|payment)\b|rs\.|\[/i.test(histLine[0]) &&
+    (/units?|kwh|consumption/i.test(histLine[0]) || (histLine[1].match(MONTH_TOKEN) ?? []).length >= 3);
+  const fromText = !hist.some((f) => /history/i.test(f.label)) && lineOk;
+  const source = fromText ? [{ label: 'History', value: histLine![1] }] : history;
+  const past = source.flatMap((f) => historyNumbers(f.value));
+  if (fromText && past.length < 3) return undefined;
   if (!units || past.length === 0) return undefined;
   const cur = toNum(units.value);
   const avg = past.reduce((a, b) => a + b, 0) / past.length;
@@ -221,5 +237,5 @@ export async function explain(payload: CloudPayload, ex: Extraction, d: Pick<Rea
   const text = r.text.trim();
   if (payload.doc_type !== 'medicine') return text;
   // The pharmacist line is a safety rule, so it is enforced here, not left to the model.
-  return /pharmacist|فارماسسٹ/i.test(text) ? text : `${text}\n${MED_END[payload.language]}`;
+  return text.includes(MED_END[payload.language]) ? text : `${text}\n${MED_END[payload.language]}`;
 }

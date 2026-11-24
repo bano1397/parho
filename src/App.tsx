@@ -184,7 +184,7 @@ export default function App() {
       <header>
         <div>
           <h1>Parho <span lang="ur" dir="rtl" className="urdu" style={{ fontSize: '0.8em' }}>پڑھو</span></h1>
-          <p className="sub">Photograph a bill, notice or medicine box. Parho reads it <b>on this device</b> and explains it in simple {lang === 'en' ? 'English' : 'Urdu'}.</p>
+          <p className="sub">Photograph a bill, notice or medicine box. Parho reads it <b>on this device</b> and explains it in simple {lang === 'en' ? 'English' : lang === 'roman_ur' ? 'Roman Urdu' : 'Urdu'}.</p>
         </div>
         <div className="row" style={{ alignItems: 'center' }}>
           <div className="langswitch" role="group" aria-label="Explanation language">

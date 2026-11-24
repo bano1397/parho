@@ -156,3 +156,34 @@ describe('bill note history from text', () => {
     expect(billNote(ex)).toMatch(/78% higher/);
   });
 });
+
+describe('deep-test regressions (24 Nov)', () => {
+  const bill = (fields: [string, string][], text = '') =>
+    ({ doc_type: 'bill', title: 'x', private_values: [], source: 'nano', text,
+       fields: fields.map(([label, value]) => ({ label, value, confidence: 'high' })) }) as never;
+  it('comma-grouped history units are whole numbers', () => {
+    expect(billNote(bill([['Units', '1,300'], ['History', 'NOV-25 1,250 DEC-25 1,100 JAN-26 1,180']]))).toBeUndefined();
+  });
+  it('month-year with a space is not counted as units', () => {
+    expect(billNote(bill([['Units', '450'], ['History', 'NOV 25 300 DEC 25 280']]))).toMatch(/55% higher/);
+  });
+  it('a payment history line in the text is ignored', () => {
+    expect(billNote(bill([['Units Consumed', '300']], 'Payment History: 12-10-2026 Rs 5,000'))).toBeUndefined();
+    expect(billNote(bill([['Units Consumed', '300']], 'Billing History: Paid 05/10/2026 Rs 1,200'))).toBeUndefined();
+    expect(billNote(bill([['Units Consumed', '300']], 'CNIC history: 35202-1234567-1'))).toBeUndefined();
+  });
+});
+
+describe('medicine max-dose regressions (24 Nov)', () => {
+  const keep = (value: string) => (_san({ title: 'x', private_values: [], text: '', doc_type: 'medicine', fields: [{ label: 'Active ingredient', value, confidence: 'high' }] } as never) as { fields: unknown[] }).fields.length;
+  it('drops a daily maximum hidden as a second strength', () => {
+    for (const v of ['Paracetamol 500 mg, max 4 g', 'Ibuprofen 200 mg up to 1200 mg', 'Paracetamol 500 mg (4 g limit)']) expect(keep(v)).toBe(0);
+    expect(keep('Paracetamol 500 mg')).toBe(1);
+  });
+  it('always appends the exact pharmacist line, even when the answer mentions a pharmacist', async () => {
+    const engines = { cloud: async () => ({ text: 'Panadol has paracetamol 500 mg. Your pharmacist may say take 2 tablets.', source: 'in_cloud' }) } as never;
+    const ex = { doc_type: 'medicine', title: 'Panadol', private_values: [], text: '', source: 'nano', fields: [{ label: 'Name', value: 'Panadol', confidence: 'high' }] } as never;
+    const out = await explain({ doc_type: 'medicine', title: 'Panadol', fields: [{ label: 'Name', value: 'Panadol' }], redacted_text: '', language: 'en' }, ex, { engines, log: () => {} });
+    expect(out).toContain('Ask a doctor or pharmacist how much to take and when.');
+  });
+});

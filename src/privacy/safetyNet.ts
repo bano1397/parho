@@ -18,6 +18,7 @@ export function normaliseDigits(s: string): string {
     .normalize('NFKC') // fullwidth ０-９ → 0-9
     .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '') // zero-width characters
     .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[\u2010\u2011\u2212]/g, '-') // Unicode hyphens and minus → '-'
     .replace(/[०-९]/g, (d) => String(d.charCodeAt(0) - 0x0966))
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
@@ -39,6 +40,8 @@ export const PATTERNS: { kind: PrivateKind; re: RegExp }[] = [
   // Account/reference IDs mixing letters and 7+ digits, e.g. "LE-04-1234567-U".
   { kind: 'LONG_NUMBER', re: /(?<![\w-])(?=[\w-]*[a-z])(?=(?:[\w-]*?\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\w-])/i },
   { kind: 'LONG_NUMBER', re: /(?<!\d)\d{10,}(?!\d)/ },
+  // WAPDA-style reference numbers printed in groups: "04 11111 1111111 U".
+  { kind: 'LONG_NUMBER', re: /(?<!\d)(?<!\d-)\d{2}[\s-]?\d{5}[\s-]?\d{7}(?:\s?[A-Z](?![A-Za-z]))?(?![\d-])/ },
 ];
 
 const IMAGE_RE = /data:image|[A-Za-z0-9+/=]{200,}/;
