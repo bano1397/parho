@@ -128,3 +128,11 @@ describe('final-check privacy regressions (25 Nov)', () => {
     expect(redact('Naam Ahmed Khan')).toContain('[NAME]');
   });
 });
+
+describe('already-redacted labels keep their colon (25 Nov)', () => {
+  it('leaves "Address: [ADDRESS]" unchanged', () => {
+    expect(redact('Address: [ADDRESS]')).toBe('Address: [ADDRESS]');
+    expect(redact('Consumer Name: [NAME]')).toBe('Consumer Name: [NAME]');
+    expect(redact('Consumer Name: Ahmed Khan')).toBe('Consumer Name: [NAME]');
+  });
+});

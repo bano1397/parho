@@ -38,7 +38,7 @@ export function redactLabelledLines(text: string): string {
   let out = text;
   for (const { kind, re } of LABELLED)
     out = out.replace(re, (m, head: string, val: string) => {
-      if (/^\[[A-Z_]+\]$/.test(val.trim())) return head + val;
+      if (/^[:\-–.\s]*\[[A-Z_]+\]$/.test(val.trim())) return m;
       // The colon-less name labels only count when a capitalised or Urdu word follows ("Name due date …" is not a name).
       if (re === COLONLESS_NAME && !/^[\p{Lu}\u0600-\u06FF]/u.test(val)) return m;
       return `${head}[${kind}]`;
