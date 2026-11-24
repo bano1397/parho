@@ -14,9 +14,35 @@ struct PrivacyBlocked: Error, Equatable {
 
 struct Rx: @unchecked Sendable {
     let re: NSRegularExpression
-    init(_ pattern: String, _ options: NSRegularExpression.Options = []) {
+    /// `ascii: true` (the default) makes \w, \b and \d ASCII-only, like JavaScript regexes without the u flag.
+    /// ICU treats them as Unicode, so an Urdu letter next to an ID would otherwise count as a "word" character
+    /// and stop a pattern from matching (deep-test finding: Urdu-adjacent IDs reached the cloud on iOS).
+    init(_ pattern: String, _ options: NSRegularExpression.Options = [], ascii: Bool = true) {
         // Patterns are constants checked by the tests, so a bad one is a programming error.
-        re = try! NSRegularExpression(pattern: pattern, options: options)
+        re = try! NSRegularExpression(pattern: ascii ? Rx.asciiClasses(pattern) : pattern, options: options)
+    }
+    static let W = "[A-Za-z0-9_]"
+    static let B = "(?:(?<=[A-Za-z0-9_])(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])(?=[A-Za-z0-9_]))"
+    /// Rewrites \w → [A-Za-z0-9_], \d → [0-9] (also inside character classes) and \b → an ASCII word boundary.
+    static func asciiClasses(_ p: String) -> String {
+        var out = ""
+        var it = p.makeIterator()
+        var inClass = false
+        while let c = it.next() {
+            if c == "\\" {
+                guard let n = it.next() else { out.append(c); break }
+                switch n {
+                case "w": out += inClass ? "A-Za-z0-9_" : W
+                case "d": out += inClass ? "0-9" : "[0-9]"
+                case "b" where !inClass: out += B
+                default: out.append(c); out.append(n)
+                }
+                continue
+            }
+            if c == "[" { inClass = true } else if c == "]" { inClass = false }
+            out.append(c)
+        }
+        return out
     }
     var pattern: String { re.pattern }
     func test(_ s: String) -> Bool {
@@ -55,6 +81,7 @@ enum Privacy {
         var out = s.precomposedStringWithCompatibilityMapping // NFKC: fullwidth ０-９ → 0-9
         out = out.replacingOccurrences(of: "[\\u200B-\\u200D\\u2060\\uFEFF]", with: "", options: .regularExpression)
         out = out.replacingOccurrences(of: "[\\u00A0\\u2007\\u202F]", with: " ", options: .regularExpression)
+        out = out.replacingOccurrences(of: "[\\u2010\\u2011\\u2212]", with: "-", options: .regularExpression) // Unicode hyphens and minus → '-'
         var scalars = String.UnicodeScalarView()
         for u in out.unicodeScalars {
             let v = u.value
@@ -83,6 +110,8 @@ enum Privacy {
         // Account/reference IDs mixing letters and 7+ digits, e.g. "LE-04-1234567-U".
         (.LONG_NUMBER, "(?<![\\w-])(?=[\\w-]*[a-z])(?=(?:[\\w-]*?\\d){7})[a-z0-9]+(?:-[a-z0-9]+)+(?![\\w-])", true),
         (.LONG_NUMBER, "(?<!\\d)\\d{10,}(?!\\d)", false),
+        // WAPDA-style reference numbers printed in groups: "04 11111 1111111 U".
+        (.LONG_NUMBER, "(?<!\\d)(?<!\\d-)\\d{2}[\\s-]?\\d{5}[\\s-]?\\d{7}(?:\\s?[A-Z](?![A-Za-z]))?(?![\\d-])", false),
     ]
     static let findPatterns: [(PrivateKind, Rx)] = patternSpecs.map { ($0.0, Rx($0.1, $0.2 ? [.caseInsensitive] : [])) }
     static let redactPatterns: [(PrivateKind, Rx)] = patternSpecs.map { ($0.0, Rx($0.1)) }
@@ -121,7 +150,7 @@ enum Privacy {
         let chars = Array(squash(normaliseDigits(value)))
         if chars.count < 2 { return nil }
         let body = chars.map { escapeRe(String($0)) }.joined(separator: "[\\s\\-.,_/–—'’()]*")
-        return Rx("(?<![\\p{L}\\p{N}])\(body)(?![\\p{L}\\p{N}])", [.caseInsensitive])
+        return Rx("(?<![\\p{L}\\p{N}])\(body)(?![\\p{L}\\p{N}])", [.caseInsensitive], ascii: false)
     }
 
     // Labelled lines whose VALUE is private (used when no model flagged them, e.g. raw OCR).
@@ -134,7 +163,7 @@ enum Privacy {
         ("NAME", Rx("^(\\s*(?:ولد|بنت|زوجہ|ولدیت\\s*:?)\\s*)(?!\\[)(\\S.*)$", [.anchorsMatchLines])),
         ("ADDRESS", Rx("^(\\s*(?:address|addr\\.?|service\\s*address|postal\\s*address|pata|پتہ|پتا)\\s*[:\\-–.]?\\s*)(?!\\[)(\\S.*)$", [.caseInsensitive, .anchorsMatchLines])),
         // ID labels anywhere in a line: "Consumer 041234567 due", "Ref: LE-04-1234567-U".
-        ("ACCOUNT", Rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|#|number))?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", [.caseInsensitive, .anchorsMatchLines])),
+        ("ACCOUNT", Rx("(\\b(?:account\\s*(?:no|#|number|id)|acc\\.?\\s*(?:no|#)|a/c\\s*(?:no|#)?|consumer(?:\\s*(?:no|id|i\\.d\\.?|#|number))?|حوالہ\\s*نمبر|ریفرنس(?:\\s*نمبر)?|صارف(?:\\s*نمبر)?|بل\\s*نمبر|اکاؤنٹ(?:\\s*نمبر)?|reference\\s*(?:no|#|number)?|ref\\.?\\s*(?:no|#)?|customer\\s*(?:id|no|#)|cust\\.?\\s*(?:id|no|#)|meter(?:\\s*(?:no|#|number))?|ac\\.?\\s*(?:no|#)|iban)\\.?\\s*[:\\-–.]?\\s*)(?!\\[)(\\d[\\d\\s-]{6,}\\d(?:\\s?[A-Z]\\b)?|(?=[\\w-]*\\d)[\\w-]{5,}(?:\\s\\d{3,})*)", [.caseInsensitive, .anchorsMatchLines])),
     ]
 
     // Address words common on Pakistani paperwork; the rest of that segment is treated as an address.

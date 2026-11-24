@@ -15,18 +15,20 @@ enum Engines {
     static func ocr(_ image: UIImage) async throws -> String {
         guard let cg = image.cgImage else { return "" }
         let orientation = CGImagePropertyOrientation(image.imageOrientation)
+        // Resume the continuation from ONE place only: perform() is synchronous, so read the results after it
+        // returns (Vision can report a failure both to the handler and by throwing; resuming twice crashes).
         return try await withCheckedThrowingContinuation { cont in
-            let req = VNRecognizeTextRequest { req, err in
-                if let err { cont.resume(throwing: err); return }
-                let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
-                cont.resume(returning: Self.joinLines(obs))
-            }
-            req.recognitionLevel = .accurate
-            req.usesLanguageCorrection = false // keep numbers exactly as printed
-            req.recognitionLanguages = ["en-US"]
             DispatchQueue.global(qos: .userInitiated).async {
-                do { try VNImageRequestHandler(cgImage: cg, orientation: orientation).perform([req]) }
-                catch { cont.resume(throwing: error) }
+                let req = VNRecognizeTextRequest()
+                req.recognitionLevel = .accurate
+                req.usesLanguageCorrection = false // keep numbers exactly as printed
+                req.recognitionLanguages = ["en-US"]
+                do {
+                    try VNImageRequestHandler(cgImage: cg, orientation: orientation).perform([req])
+                    cont.resume(returning: Self.joinLines(req.results ?? []))
+                } catch {
+                    cont.resume(throwing: error)
+                }
             }
         }
     }

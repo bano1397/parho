@@ -11,7 +11,7 @@ enum Prompts {
     - fields: the facts a person must act on, each {"label": ..., "value": ..., "confidence": "high" or "low"}. For a bill: amount due, due date, amount after due date, units, billing month, previous months' units if printed. For a notice: what is demanded, deadline, amount, what happens if ignored (e.g. disconnection), and how or where to pay or respond. For medicine: name, strength, dose, maximum per day, warnings, expiry date.
     - Copy values exactly as printed. Never guess. If a character is unclear, set confidence "low".
     - Bills: "units" means the units CONSUMED this month (the box labelled UNITS), never a meter reading. Copy dates with the year exactly as printed; never change the year.
-    - Medicine: give the brand name exactly as printed and the active ingredient separately. Never write a dose from your own knowledge.
+    - Medicine: give the brand name exactly as printed and the active ingredient separately. Include dose, maximum per day, warnings or expiry ONLY if those words are clearly in the text; otherwise leave that field out. Never write a dose from your own knowledge.
     - private_values: EVERY person name, CNIC, address, account/consumer/reference number, phone number and email, each {"kind": "NAME"|"CNIC"|"ADDRESS"|"ACCOUNT"|"PHONE"|"EMAIL", "value": ...}.
     - text: leave as an empty string "".
     Be brief: at most 10 fields.

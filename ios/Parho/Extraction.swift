@@ -89,9 +89,10 @@ enum Doc {
     static let PRIVATE_LABEL = Rx("private|address|cnic|consumer|reference|ref\\.?\\s*(no|#)|account|acc\\.?\\s*(no|#)|meter\\s*(no|#|number)|phone|mobile|email|customer|cust\\.?\\s*(no|#|id)?\\b|recipient|holder|addressee|applicant|student|patient|father|husband|s/o|d/o|w/o|bill\\s*of|\\bid\\b|pata|walid|wald|sender|^\\s*(to|from)\\s*$|account\\s*title|iban", [.caseInsensitive])
     static let MED_SAFE_LABEL = Rx("^\\s*(brand\\s*)?(name|brand|title|product|drug|active[\\s_]*ingredients?|ingredients?|generic(\\s*name)?|composition|contains|strength|form|(medicine|drug|product|dawai|dawa)\\s*(ka\\s*)?(name|naam)?)\\s*$", [.caseInsensitive])
     static let MED_RISKY_LABEL = Rx("dos|per\\s*day|maximum|max|warning|caution|expir|exp\\.?\\s*date|direction|how\\s*to|frequency|every|usage|use|indicat|for\\b", [.caseInsensitive])
-    static let MED_RISKY_VALUE = Rx("\\d\\s*\\+\\s*\\d|\\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\\b|\\bx\\s*\\d|\\d\\s*x\\b|times|daily|hours?|hrs?|days?|weeks?|/\\s*kg|exceed|before|until|\\d{1,2}\\s*[/-]\\s*\\d{2,4}|child|adult|pregnan|take|tablets?\\s+every|every|baar|roz|din\\b|گولی|روزانہ|بار|دن|خوراک|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات", [.caseInsensitive])
+    static let MED_RISKY_VALUE = Rx("\\d\\s*\\+\\s*\\d|\\b(OD|BD|BID|TDS|TID|QID|HS|PRN|SOS|QDS)\\b|\\bx\\s*\\d|\\d\\s*x\\b|times|daily|hours?|hrs?|days?|weeks?|/\\s*kg|exceed|before|until|\\d{1,2}\\s*[/-]\\s*\\d{2,4}|child|adult|pregnan|take|tablets?\\s+every|every|baar|roz|din\\b|گولی|روزانہ|بار|دن|خوراک|max|maximum|up\\s*to|limit|per\\s*day|/\\s*day|a\\s*day|warning|caution|do not|don't|avoid|once|twice|thrice|morning|night|subah|shaam|raat|صبح|شام|رات", [.caseInsensitive])
     static let STRENGTH_RE = Rx("^\\s*\\d+(\\.\\d+)?\\s*(mg|mcg|µg|g|ml|%|iu)(\\s*/\\s*\\d*\\s*(ml|g|tab(let)?))?\\s*$", [.caseInsensitive])
     static let FORM_RE = Rx("^\\s*(tablets?|capsules?|syrup|suspension|drops?|cream|ointment|gel|injection|sachets?|inhaler|spray)\\s*$", [.caseInsensitive])
+    static let STRENGTH_ANY = Rx("\\d+(\\.\\d+)?\\s*(mg|mcg|µg|g|ml|%|iu)\\b", [.caseInsensitive])
     static let EMPTY_VALUE = Rx("^(not specified|not readable|n/a|none|unknown|-)?$", [.caseInsensitive])
 
     static func medicineFieldOk(_ f: Field) -> Bool {
@@ -99,6 +100,8 @@ enum Doc {
         if Rx("strength", [.caseInsensitive]).test(f.label) { return STRENGTH_RE.test(f.value) }
         if Rx("^\\s*form\\s*$", [.caseInsensitive]).test(f.label) { return FORM_RE.test(f.value) }
         if MED_RISKY_VALUE.test(f.value) { return false }
+        // At most one strength per value: a second one is usually a daily maximum ("500 mg, 4 g").
+        if STRENGTH_ANY.matches(f.value).count > 1 { return false }
         // Names/ingredients may carry a strength ("Paracetamol 500 mg") but no other numbers.
         let rest = Rx("\\d+(\\.\\d+)?\\s*(mg|mcg|µg|g|ml|%|iu)\\b", [.caseInsensitive]).replace(f.value, with: "")
         return !Rx("\\d").test(rest)
@@ -203,6 +206,15 @@ enum Doc {
 
     static let BILL_JUMP_RATIO = 0.5
 
+    static let MONTH_TOKEN = Rx("\\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\b", [.caseInsensitive])
+    /// Units numbers from a history value: drops dates, month-year tokens ("NOV-25", "NOV 25", "Nov 2025") and thousands commas.
+    static func historyNumbers(_ value: String) -> [Double] {
+        var v = Rx("\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b").replace(value, with: " ")
+        v = Rx("(\\d),(?=\\d{3}(?!\\d))").replace(v) { g in g[1] }
+        v = Rx("[a-z]{3,9}\\.?\\s*[-'’]?\\s*(?:(?:19|20)\\d{2}|\\d{2})(?!\\d)", [.caseInsensitive]).replace(v, with: " ")
+        return Rx("\\d{1,5}").matches(v).compactMap(Double.init).filter { $0 > 0 && $0 < 5000 && !($0 >= 1990 && $0 <= 2100) }
+    }
+
     /// Computed on the device: does this bill jump sharply compared to earlier months?
     static func billNote(_ ex: Extraction) -> String? {
         guard ex.docType == .bill else { return nil }
@@ -211,25 +223,23 @@ enum Doc {
         if mf > 1 { return nil }
         let hist = fields.filter { Rx("prev|last|history", [.caseInsensitive]).test($0.label) && !Rx("reading", [.caseInsensitive]).test($0.label) }
         guard let units = fields.first(where: { UNITS_LABEL.test($0.label) && !Rx("prev|last|history", [.caseInsensitive]).test($0.label) }) else { return nil }
-        var history = hist.contains { Rx("history", [.caseInsensitive]).test($0.label) } ? hist.filter { Rx("history", [.caseInsensitive]).test($0.label) } : hist
-        // A full "History: ..." line in the text beats single "previous month" fields (same as the web).
-        if !hist.contains(where: { Rx("history", [.caseInsensitive]).test($0.label) }) {
-            var line: String?
-            _ = Rx("^.*\\bhistory\\b[^:\\n]*:(.*)$", [.caseInsensitive, .anchorsMatchLines]).replace(ex.text) { g in
-                if line == nil { line = g[1] }
-                return g[0]
-            }
-            if let line { history = [Field(label: "History", value: line)] }
+        let history = hist.contains { Rx("history", [.caseInsensitive]).test($0.label) } ? hist.filter { Rx("history", [.caseInsensitive]).test($0.label) } : hist
+        // If the reader left the printed history line out of its fields, read it from the (redacted) text,
+        // but only a line that looks like a units history (not "Payment History: 12-10-2026 Rs 5,000").
+        var line: (whole: String, value: String)?
+        _ = Rx("^.*\\bhistory\\b[^:\\n]*:(.*)$", [.caseInsensitive, .anchorsMatchLines]).replace(ex.text) { g in
+            if line == nil { line = (g[0], g[1]) }
+            return g[0]
         }
-        let monthYear = Rx("[a-z]{3,9}(?:[-'’]?\\d{2}|\\.?\\s*[-'’]?\\s*(?:19|20)\\d{2})(?!\\d)", [.caseInsensitive])
-        var past: [Double] = []
-        for f in history {
-            let cleaned = monthYear.replace(f.value, with: " ")
-            for m in Rx("\\d{1,5}").matches(cleaned) {
-                guard let n = Double(m) else { continue }
-                if n > 0 && n < 5000 && !(n >= 1990 && n <= 2100) { past.append(n) }
-            }
+        var lineOk = false
+        if let line {
+            lineOk = !Rx("\\b(rs|pkr|paid|payment)\\b|rs\\.|\\[", [.caseInsensitive]).test(line.whole) &&
+                (Rx("units?|kwh|consumption", [.caseInsensitive]).test(line.whole) || MONTH_TOKEN.matches(line.value).count >= 3)
         }
+        let fromText = !hist.contains(where: { Rx("history", [.caseInsensitive]).test($0.label) }) && lineOk
+        let source = fromText ? [Field(label: "History", value: line!.value)] : history
+        let past = source.flatMap { historyNumbers($0.value) }
+        if fromText && past.count < 3 { return nil }
         if past.isEmpty { return nil }
         let cur = toNum(units.value)
         let avg = past.reduce(0, +) / Double(past.count)
@@ -245,6 +255,7 @@ enum Doc {
     static func finishExplanation(_ text: String, _ p: CloudPayload) -> String {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if p.doc_type != .medicine { return t }
-        return Rx("pharmacist|فارماسسٹ", [.caseInsensitive]).test(t) ? t : "\(t)\n\(Prompts.medEnd(p.language))"
+        // The exact closing line must be there; a reply that merely mentions a pharmacist is not enough.
+        return t.contains(Prompts.medEnd(p.language)) ? t : "\(t)\n\(Prompts.medEnd(p.language))"
     }
 }

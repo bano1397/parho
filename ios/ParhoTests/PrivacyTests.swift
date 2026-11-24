@@ -197,7 +197,8 @@ final class DocTests: XCTestCase {
         XCTAssertTrue(prompt.contains("NOTE FROM THE APP")); XCTAssertNil(Privacy.findPrivate(prompt, known: ["Ahmed Fake Khan"]))
         let med = CloudPayload(doc_type: .medicine, title: "Panadol", fields: [], redacted_text: "", language: .ur)
         XCTAssertTrue(Doc.finishExplanation("یہ پیناڈول ہے۔", med).contains("فارماسسٹ"))
-        XCTAssertEqual(Doc.finishExplanation("Ask a pharmacist.", CloudPayload(doc_type: .medicine, title: nil, fields: [], redacted_text: "", language: .en)), "Ask a pharmacist.")
+        // Mentioning a pharmacist is not enough: the exact closing line is always added (24 Nov deep test).
+        XCTAssertEqual(Doc.finishExplanation("Ask a pharmacist.", CloudPayload(doc_type: .medicine, title: nil, fields: [], redacted_text: "", language: .en)), "Ask a pharmacist.\nAsk a doctor or pharmacist how much to take and when.")
     }
 
     func testExplainRefusesDirtyPayload() {
@@ -210,5 +211,61 @@ final class DocTests: XCTestCase {
         let body = Prompts.structureFromText + Privacy.redact("Name Ahmed CNIC 35202-1234567-1 Amount Rs 500")
         XCTAssertFalse(body.contains("35202")); XCTAssertTrue(body.contains("[CNIC]"))
         XCTAssertNoThrow(try Privacy.assertClean(body))
+    }
+}
+
+/// 24 Nov deep-test regressions (same cases as the web tests marked "24 Nov", plus iOS-only ICU cases).
+final class DeepTest24NovTests: XCTestCase {
+    private func bill(_ f: [(String, String)], text: String = "") -> Extraction {
+        Extraction(docType: .bill, title: "x", fields: f.map { Field(label: $0.0, value: $0.1) }, privateValues: [], text: text, source: .onDevice)
+    }
+    private func keepMed(_ v: String) -> Int {
+        Doc.sanitize(Extraction(docType: .medicine, title: "x", fields: [Field(label: "Active ingredient", value: v)], privateValues: [], text: "", source: .onDevice)).fields.count
+    }
+
+    func testCommaGroupedHistory() {
+        XCTAssertNil(Doc.billNote(bill([("Units", "1,300"), ("History", "NOV-25 1,250 DEC-25 1,100 JAN-26 1,180")])))
+    }
+    func testMonthYearWithSpace() {
+        XCTAssertNotNil(Doc.billNote(bill([("Units", "450"), ("History", "NOV 25 300 DEC 25 280")]))?.range(of: "55% higher"))
+    }
+    func testPaymentHistoryLineIgnored() {
+        XCTAssertNil(Doc.billNote(bill([("Units Consumed", "300")], text: "Payment History: 12-10-2026 Rs 5,000")))
+        XCTAssertNil(Doc.billNote(bill([("Units Consumed", "300")], text: "Billing History: Paid 05/10/2026 Rs 1,200")))
+        XCTAssertNil(Doc.billNote(bill([("Units Consumed", "300")], text: "CNIC history: 35202-1234567-1")))
+    }
+    func testHistoryLineStillUsed() {
+        let e = bill([("Units Consumed", "412"), ("Previous Month Units", "188")], text: "Units Consumed: 412\nHistory: Oct 188 | Sep 205 | Aug 260 | Jul 274")
+        XCTAssertNotNil(Doc.billNote(e)?.range(of: "78% higher"))
+    }
+    func testMedicineDailyMaximumDropped() {
+        for v in ["Paracetamol 500 mg, max 4 g", "Ibuprofen 200 mg up to 1200 mg", "Paracetamol 500 mg (4 g limit)"] { XCTAssertEqual(keepMed(v), 0, v) }
+        XCTAssertEqual(keepMed("Paracetamol 500 mg"), 1)
+    }
+    func testExactPharmacistLine() {
+        let med = CloudPayload(doc_type: .medicine, title: "Panadol", fields: [], redacted_text: "", language: .en)
+        XCTAssertTrue(Doc.finishExplanation("Panadol has paracetamol 500 mg. Your pharmacist may say take 2 tablets.", med)
+            .contains("Ask a doctor or pharmacist how much to take and when."))
+    }
+    func testGroupedReferenceNumbersAndUnicodeHyphens() {
+        for t in ["بل 04 11111 1111111 U", "Consumer ID\u{2010}04 11111 1111111", "صارف04-12345-1234567", "Ref 04 11111 1111111"] {
+            XCTAssertNotNil(Privacy.findPrivate(t), t)
+        }
+        XCTAssertTrue(Privacy.redact("Consumer I.D. 0412345678901").contains("[ACCOUNT]"))
+    }
+    func testReadingsAndDatesNotFlagged() {
+        XCTAssertNil(Privacy.findPrivate("Present 12634 Previous 12603 Units 31 Due 24-11-2026"))
+    }
+    /// ICU treats \w and \b as Unicode; Parho makes them ASCII like the web, so Urdu touching an ID cannot hide it.
+    func testUrduAdjacentIdsBlocked() {
+        for t in ["حوالہ نمبرLE-04-1234567-U", "ریفرنسLE-04-1234567-U", "LE-04-1234567-Uنمبر", "éLE-04-1234567-U", "ali at gmail dot comپر"] {
+            XCTAssertNotNil(Privacy.findPrivate(t), t)
+            XCTAssertThrowsError(try Privacy.assertClean(t), t)
+        }
+        XCTAssertFalse(Privacy.redact("رابطہ ali at gmail dot comپر").contains("ali at gmail"))
+    }
+    func testAsciiRewriteKeepsPatternsValid() {
+        XCTAssertEqual(Rx.asciiClasses("[\\w.+-]\\b\\d"), "[A-Za-z0-9_.+-]" + Rx.B + "[0-9]")
+        XCTAssertTrue(Rx("\\bab\\b").test("x ab y")); XCTAssertFalse(Rx("\\bab\\b").test("xab"))
     }
 }

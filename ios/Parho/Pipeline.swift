@@ -22,6 +22,10 @@ final class Pipeline {
     var onDeviceText = Engines.onDeviceStatus.text
 
     private var confirmCont: CheckedContinuation<Bool, Never>?
+    /// Each read/explain run gets a number; a run whose number is no longer current never writes state
+    /// (deep-test findings: a second read or a language switch mid-call let an old run overwrite the new one).
+    private var gen = 0
+    private var task: Task<Void, Never>?
     private let speech = AVSpeechSynthesizer()
 
     func refreshStatus() {
@@ -30,6 +34,8 @@ final class Pipeline {
     }
 
     func reset() {
+        gen += 1
+        task?.cancel(); task = nil
         stopSpeaking()
         extraction = nil; payload = nil; answer = ""; error = nil; timeline = []; pendingRedacted = ""; progress = ""
         confirmCont?.resume(returning: false); confirmCont = nil
@@ -43,15 +49,18 @@ final class Pipeline {
         reset()
         image = img
         phase = .reading
-        Task { await runRead(img) }
+        let g = gen
+        task = Task { await runRead(img, g) }
     }
 
-    private func runRead(_ img: UIImage) async {
+    private func runRead(_ img: UIImage, _ g: Int) async {
+        @MainActor func stale() -> Bool { g != gen || Task.isCancelled }
         do {
             refreshStatus()
             progress = "Reading the text on this phone…"
             let t0 = Date()
             let raw = try await Engines.ocr(img)
+            if stale() { return }
             log("read", true, "Apple Vision (this phone)", "Text read from the photo on this phone; the photo never leaves it", t0)
             if raw.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 {
                 throw Msg("No printed text found. Try a clearer, flatter photo in good light.")
@@ -62,12 +71,14 @@ final class Pipeline {
                 progress = "Understanding it on this phone…"
                 let t1 = Date()
                 for _ in 0..<2 where ex == nil {
+                    if stale() { return }
                     if let out = try? await Engines.structureOnDevice(raw), var e = try? Doc.parse(out, source: .onDevice) {
                         e.text = raw
                         ex = Doc.sanitize(e)
                     }
                 }
-                log("read", true, ex == nil ? "Apple on-device model" : "Apple on-device model", ex == nil ? "On-device model gave an unusable answer twice — switching to fallback" : "Apple's on-device model organised the text — nothing left the phone", t1)
+                if stale() { return }
+                log("read", true, "Apple on-device model", ex == nil ? "On-device model gave an unusable answer twice — switching to fallback" : "Apple's on-device model organised the text — nothing left the phone", t1)
             }
 
             if ex == nil {
@@ -78,12 +89,14 @@ final class Pipeline {
                 pendingRedacted = redacted
                 phase = .confirm
                 let ok = await withCheckedContinuation { confirmCont = $0 }
+                if stale() { return } // a newer read already reset the screen
                 confirmCont = nil
                 if !ok { phase = .idle; pendingRedacted = ""; return }
                 phase = .reading
                 progress = "Organising the redacted text in the cloud…"
                 let t2 = Date()
                 let out = try await Engines.cloud(body, json: true)
+                if stale() { return }
                 var e = try Doc.parse(out, source: .cloudFromOcr)
                 e.text = redacted
                 ex = Doc.sanitize(e)
@@ -100,8 +113,10 @@ final class Pipeline {
             log("redact", true, "this phone", "Names, CNIC, address, phone and account numbers removed on this phone", t3)
             phase = .ready
         } catch let b as PrivacyBlocked {
+            if stale() { return }
             fail("Stopped to protect you: something that looks like a \(b.kind.rawValue.replacingOccurrences(of: "_", with: " ").lowercased()) was still in the text, so nothing was sent.")
         } catch {
+            if stale() { return }
             fail(friendly(error))
         }
         progress = ""
@@ -110,6 +125,8 @@ final class Pipeline {
     func confirmSend(_ ok: Bool) { confirmCont?.resume(returning: ok); confirmCont = nil }
 
     private func languageChanged() {
+        // Drop an explanation still on its way in the old language.
+        if phase == .explaining { gen += 1; task?.cancel(); task = nil; phase = .ready }
         stopSpeaking(); answer = ""
         if let ex = extraction { payload = try? Doc.buildCloudPayload(ex, lang) }
     }
@@ -117,19 +134,25 @@ final class Pipeline {
     func explain() {
         guard let p = payload, let ex = extraction else { return }
         phase = .explaining; answer = ""; error = nil
-        Task {
+        gen += 1
+        let g = gen
+        task = Task { @MainActor in
+            @MainActor func stale() -> Bool { g != gen || Task.isCancelled }
             do {
                 try Privacy.assertClean(p.json, known: ex.privateValues.map(\.value))
                 let prompt = Prompts.explain(p, note: Doc.billNote(ex))
                 let t0 = Date()
                 let text = try await Engines.cloud(prompt)
+                if stale() { return }
                 log("explain", false, "Gemini cloud", "\(lang == .en ? "The explanation" : "Urdu explanation") needs the cloud model — only redacted text was sent", t0, bytes: prompt.utf8.count)
                 answer = Doc.finishExplanation(text, p)
                 phase = .ready
             } catch let b as PrivacyBlocked {
+                if stale() { return }
                 fail("Stopped to protect you (\(b.kind.rawValue)): nothing was sent.")
                 phase = .ready
             } catch {
+                if stale() { return }
                 fail(friendly(error)); phase = .ready
             }
         }
